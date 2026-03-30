@@ -1,27 +1,24 @@
+<!--
+@file: docs/subsystems/virtgpu-backend.md
+@doc_type: subsystem_reference
+@version: 1.0.0
+@title: GGML-VirtGPU Backend
+@summary: Canonical overview and reference for the GGML-VirtGPU backend architecture and usage.
+@tags: [backend, virtgpu, virtualization, architecture]
+@author: Registrar Prime
+@copyright: © 2026 Carlos Fundora
+@status: active
+@last_updated: 2026-03-29
+@changelog:
+- 2026-03-29 [@Registrar Prime]: Consolidated VirtGPU documentation from scattered files.
+-->
 # GGML-VirtGPU Backend
 
-The GGML-VirtGPU backend enables GGML applications to run machine
-learning computations on host hardware while the application itself
-runs inside a virtual machine.  It uses host-guest shared memory to
-efficiently share data buffers between the two sides.
+The GGML-VirtGPU backend enables GGML applications to run machine learning computations on host hardware while the application itself runs inside a virtual machine. It uses host-guest shared memory to efficiently share data buffers between the two sides.
 
-This backend relies on the virtio-gpu, and VirglRenderer API Remoting
-(APIR) component. The backend is split into two libraries:
-- a GGML implementation (the "remoting frontend"), running in the
-  guest and interacting with the virtgpu device
-- a VirglRenderer APIR compatible library (the "remoting backend"),
-  running in the host and interacting with Virglrenderer and an actual
-  GGML device backend.
-
-## OS support
-
-| OS       | Status            | Backend     | CI testing  | Notes
-| -------- | ----------------- | ----------- | ----------- | -----
-| MacOS 14 | Supported         | ggml-metal  | X           | Working when compiled on MacOS 14
-| MacOS 15 | Supported         | ggml-metal  | X           | Working when compiled on MacOS 14 or MacOS 15
-| MacOS 26 | Not tested        |             |             |
-| Linux    | Under development | ggml-vulkan | not working | Working locally, CI running into deadlocks
-
+This backend relies on the virtio-gpu and VirglRenderer API Remoting (APIR) component. The backend is split into two libraries:
+- A GGML implementation (the "remoting frontend"), running in the guest and interacting with the virtgpu device.
+- A VirglRenderer APIR compatible library (the "remoting backend"), running in the host and interacting with Virglrenderer and an actual GGML device backend.
 
 ## Architecture Overview
 
@@ -31,7 +28,7 @@ The GGML-VirtGPU backend consists of three main components:
 graph TD
     %% Nodes
 
- subgraph GuestVM ["Guest VM - Frontend"]
+    subgraph GuestVM ["Guest VM - Frontend"]
         App([GGML Application<br/>llama.cpp, etc.])
 
         direction TB
@@ -83,8 +80,7 @@ Each connection uses two shared memory buffers:
 
 - **Data Buffer** (24 MiB): For command/response data and tensor transfers
 - **Reply Buffer** (16 KiB): For command replies and status information
-- **Data Buffers**: Dynamically allocated host-guest shared buffers
-  served as GGML buffers.
+- **Data Buffers**: Dynamically allocated host-guest shared buffers served as GGML buffers.
 
 ### APIR Protocol
 
@@ -129,7 +125,7 @@ Commands and data are serialized using a custom binary protocol with:
 - virglrenderer with APIR support (pending upstream review)
 - Target backend libraries (libggml-metal, libggml-vulkan, etc.)
 
-## Configuration
+## Configuration Overview
 
 ### Environment Variables
 
@@ -147,36 +143,29 @@ Commands and data are serialized using a custom binary protocol with:
 - VirglRenderer with APIR patches
 - Compatible backend libraries on host
 
-## Limitations
+## Limitations & Technical Notes
 
-- **VM-specific**: Only works in virtual machines with virtio-gpu support
-- **Host dependency**: Requires properly configured host-side backend
-- **Latency**: Small overhead from VM escaping for each operation
-- **Shared-memory size**: with the `libkrun` hypervisor, the RAM + VRAM
-  addressable memory is limited to 64 GB. So the maximum GPU memory
-  will be `64GB - RAM`, regardless of the hardware VRAM size.
+- **VM-specific**: Only works in virtual machines with virtio-gpu support.
+- **Host dependency**: Requires properly configured host-side backend.
+- **Latency**: Small overhead from VM escaping for each operation.
+- **Shared-memory size**: With the `libkrun` hypervisor, the RAM + VRAM addressable memory is limited to 64 GB. The maximum GPU memory will be `64GB - RAM`, regardless of the hardware VRAM size.
+- **Upstream Dependencies**:
+  - Pending upstream changes in the VirglRenderer project.
+  - Pending changes in the VMM/hypervisor running the virtual machine, which need to know how to route the newly introduced APIR capset.
+    - The environment variable `VIRGL_ROUTE_VENUS_TO_APIR=1` allows using the Venus capset, until the relevant hypervisors have been patched. However, setting this flag breaks the Vulkan/Venus normal behavior.
+    - The environment variable `GGML_REMOTING_USE_APIR_CAPSET` tells the `ggml-virtgpu` backend to use the APIR capset. This will become the default when the relevant hypervisors have been patched.
+- **Platform Focus**: Focused on improving the performance of llama.cpp running on MacOS containers, mainly tested on this platform. Linux support (via `krun`) is in progress.
 
-* This work is pending upstream changes in the VirglRenderer
-  project.
-  * The backend can be tested with Virglrenderer compiled from source
-  using this PR:
-  https://gitlab.freedesktop.org/virgl/virglrenderer/-/merge_requests/1590
-* This work is pending changes in the VMM/hypervisor running the
-  virtual machine, which need to know how to route the newly
-  introduced APIR capset.
-  * The environment variable `VIRGL_ROUTE_VENUS_TO_APIR=1` allows
-    using the Venus capset, until the relevant hypervisors have been
-    patched. However, setting this flag breaks the Vulkan/Venus normal
-    behavior.
-  * The environment variable `GGML_REMOTING_USE_APIR_CAPSET` tells the
-    `ggml-virtgpu` backend to use the APIR capset. This will become
-    the default when the relevant hypervisors have been patched.
+## OS support
 
-* This work focused on improving the performance of llama.cpp running
-  on MacOS containers, and is mainly tested on this platform. The
-  linux support (via `krun`) is in progress.
+| OS       | Status            | Backend     | CI testing  | Notes |
+| -------- | ----------------- | ----------- | ----------- | ----- |
+| MacOS 14 | Supported         | ggml-metal  | X           | Working when compiled on MacOS 14 |
+| MacOS 15 | Supported         | ggml-metal  | X           | Working when compiled on MacOS 14 or MacOS 15 |
+| MacOS 26 | Not tested        |             |             |       |
+| Linux    | Under development | ggml-vulkan | not working | Working locally, CI running into deadlocks |
 
-## See Also
+## Related Documents
 
-- [Development and Testing](VirtGPU/development.md)
-- [Backend configuration](VirtGPU/configuration.md)
+- [Development and Testing](../engineering-notes/virtgpu-development.md)
+- [Backend Configuration Variables](../reference/virtgpu-configuration-variables.md)

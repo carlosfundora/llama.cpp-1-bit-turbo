@@ -1,3 +1,17 @@
+<!--
+@file: docs/subsystems/cuda-fedora-backend.md
+@doc_type: subsystem_reference
+@version: 1.0.0
+@title: Cuda-fedora Backend
+@summary: Overview and setup instructions for the Cuda-fedora Backend.
+@tags: [backend, cuda-fedora, subsystem, compute]
+@author: Registrar Prime
+@copyright: © 2026 Carlos Fundora
+@status: active
+@last_updated: 2026-03-29
+@changelog:
+- 2026-03-29 [@Registrar Prime]: Applied canonical metadata header and moved to subsystems directory.
+-->
 # Setting Up CUDA on Fedora
 
 In this guide we setup [Nvidia CUDA](https://docs.nvidia.com/cuda/) in a toolbox container. This guide is applicable for:

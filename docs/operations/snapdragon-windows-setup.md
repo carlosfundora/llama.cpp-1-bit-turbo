@@ -1,23 +1,34 @@
+<!--
+@file: docs/operations/snapdragon-windows-setup.md
+@doc_type: operations
+@version: 1.0.0
+@title: Snapdragon Windows Setup
+@summary: Operational guide for configuring Windows on Snapdragon (WoS) devices for llama.cpp, including drivers, SDKs, and test signing.
+@tags: [snapdragon, windows, setup, operations, qualcomm]
+@author: Registrar Prime
+@copyright: © 2026 Carlos Fundora
+@status: active
+@last_updated: 2026-03-29
+@changelog:
+- 2026-03-29 [@Registrar Prime]: Extracted Windows setup instructions from snapdragon backend docs.
+-->
+# Snapdragon Windows Setup
+
 ## Overview
 
-The document covers procedures for installing the latest GPU and NPU drivers, and OpenCL and Hexagon SDKs.
+The document covers procedures for installing the latest GPU and NPU drivers, and OpenCL and Hexagon SDKs on Windows on Snapdragon devices.
 
+In order to use Hexagon NPU on Snapdragon Windows devices the underlying HTP Ops libraries (e.g `libggml-htp-v73.so`) must be included in the `.cat` file digitally signed with a trusted certificate.
 
-In order to use Hexagon NPU on Snapdragon Windows devices the underlying HTP Ops libraries (e.g libggml-htp-v73.so)
-must be included in the .cat file digitally signed with a trusted certificate.
-
-This document covers details on how to generate personal certificate files (.pfx) and how to configure the system
-to allow for test signatures (aka test-signing).
+This document covers details on how to generate personal certificate files (`.pfx`) and how to configure the system to allow for test signatures (aka test-signing).
 
 ## Install the latest Adreno OpenCL SDK
 
 Either use the trimmed down version (optimized for CI) from
-
-    https://github.com/snapdragon-toolchain/opencl-sdk/releases/download/v2.3.2/adreno-opencl-sdk-v2.3.2-arm64-wos.tar.xz
+`https://github.com/snapdragon-toolchain/opencl-sdk/releases/download/v2.3.2/adreno-opencl-sdk-v2.3.2-arm64-wos.tar.xz`
 
 Or download the complete official version from
-
-    https://softwarecenter.qualcomm.com/catalog/item/Adreno_OpenCL_SDK?version=2.3.2
+`https://softwarecenter.qualcomm.com/catalog/item/Adreno_OpenCL_SDK?version=2.3.2`
 
 Unzip/untar the archive into
 ```
@@ -27,12 +38,10 @@ c:\Qualcomm\OpenCL_SDK\2.3.2
 ## Install the latest Hexagon SDK Community Edition
 
 Either use the trimmed down version (optimized for CI) from
-
-    https://github.com/snapdragon-toolchain/hexagon-sdk/releases/download/v6.4.0.2/hexagon-sdk-v6.4.0.2-arm64-wos.tar.xz
+`https://github.com/snapdragon-toolchain/hexagon-sdk/releases/download/v6.4.0.2/hexagon-sdk-v6.4.0.2-arm64-wos.tar.xz`
 
 Or download the complete official version from
-
-    https://softwarecenter.qualcomm.com/catalog/item/Hexagon_SDK?version=6.4.0.2
+`https://softwarecenter.qualcomm.com/catalog/item/Hexagon_SDK?version=6.4.0.2`
 
 Unzip/untar the archive into
 ```
@@ -42,16 +51,14 @@ c:\Qualcomm\Hexagon_SDK\6.4.0.2
 ## Install the latest Adreno GPU driver
 
 Download the driver from
+`https://softwarecenter.qualcomm.com/catalog/item/Windows_Graphics_Driver`
 
-    https://softwarecenter.qualcomm.com/catalog/item/Windows_Graphics_Driver
-
-After the automated installation and reboot please make sure that the GPU device shows up in the `Device Manager` (under 'Display Adapters`)
+After the automated installation and reboot please make sure that the GPU device shows up in the `Device Manager` (under `Display Adapters`)
 
 ## Install the latest Qualcomm NPU driver
 
 Download the driver from
-
-    https://softwarecenter.qualcomm.com/catalog/item/Qualcomm_HND
+`https://softwarecenter.qualcomm.com/catalog/item/Qualcomm_HND`
 
 After the automated installation and reboot please make sure that the Hexagon NPU device shows up in the `Device Manager` (under `Neural Processors`).
 
@@ -69,21 +76,20 @@ Adreno GPU backend does not require test signatures.
 ### Enable testsigning
 
 Use `bcdedit` to enable test-signing
-```
+```cmd
 > bcdedit /set TESTSIGNING ON
 ```
-(Secure Boot may need to be disabled for this to work)
+*(Secure Boot may need to be disabled for this to work)*
 
 Make sure test-signing is enabled after reboot
-```
+```cmd
 > bcdedit /enum
 ...
 testsigning             Yes
 ...
 ```
-For additional details see Microsoft guide at
-
-   https://learn.microsoft.com/en-us/windows-hardware/drivers/install/the-testsigning-boot-configuration-option
+For additional details see the Microsoft guide at
+`https://learn.microsoft.com/en-us/windows-hardware/drivers/install/the-testsigning-boot-configuration-option`
 
 ### Create personal certificate
 
@@ -93,26 +99,25 @@ They are typically located at
 ```
 c:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0
 ```
-(replace 10.0.26100.0 with correct version).
+*(replace `10.0.26100.0` with the correct version).*
 
-To create personal self-signed certificate run the following commands (either from cmd or power-shell):
-```
+To create a personal self-signed certificate run the following commands (either from cmd or power-shell):
+```cmd
 > cd c:\Users\MyUser
 > mkdir Certs
 > cd Certs
 > makecert -r -pe -ss PrivateCertStore -n CN=GGML.HTP.v1 -eku 1.3.6.1.5.5.7.3.3 -sv ggml-htp-v1.pvk ggml-htp-v1.cer
 > pvk2pfx.exe -pvk ggml-htp-v1.pvk -spc ggml-htp-v1.cer -pfx ggml-htp-v1.pfx
 ```
-(replace `MyUser` with your username).
+*(replace `MyUser` with your username).*
 
 Add this certificate to `Trusted Root Certification Authorities` and `Trusted Publishers` stores.
-This can be done using `certlm` Certificate Manager tool.
+This can be done using the `certlm` Certificate Manager tool.
 Right click on the certificate store, select `All Tasks -> Import` and follow the prompts to import the certificate from the
 PFX file you created above.
 
-For additional details see Microsoft guide at
-
-    https://learn.microsoft.com/en-us/windows-hardware/drivers/install/introduction-to-test-signing
+For additional details see the Microsoft guide at
+`https://learn.microsoft.com/en-us/windows-hardware/drivers/install/introduction-to-test-signing`
 
 Make sure to save the PFX file, you will need it for the build procedures.
 Please note that the same certificate can be used for signing any number of builds.
@@ -121,7 +126,7 @@ Please note that the same certificate can be used for signing any number of buil
 
 The overall Hexagon backend build procedure for Windows on Snapdragon is the same as for other platforms.
 However, additional settings are required for generating and signing HTP Ops libraries.
-```
+```powershell
 > $env:OPENCL_SDK_ROOT="C:\Qualcomm\OpenCL_SDK\2.3.2"
 > $env:HEXAGON_SDK_ROOT="C:\Qualcomm\Hexagon_SDK\6.4.0.2"
 > $env:HEXAGON_TOOLS_ROOT="C:\Qualcomm\Hexagon_SDK\6.4.0.2\tools\HEXAGON_Tools\19.0.04"
@@ -134,7 +139,7 @@ However, additional settings are required for generating and signing HTP Ops lib
 ```
 
 Once the build is complete HTP ops libraries will be installed like this
-```
+```powershell
 > dir pkg-snapdragon/lib
 ...
 -a----         1/22/2026   6:01 PM         187656 libggml-htp-v73.so
@@ -144,9 +149,9 @@ Once the build is complete HTP ops libraries will be installed like this
 -a----         1/22/2026   6:01 PM           4139 libggml-htp.cat
 ```
 
-The .cat file, the signature and proper certificate installation can be verified with
+The `.cat` file, the signature and proper certificate installation can be verified with
 
-```
+```powershell
 > signtool.exe verify /v /pa .\pkg-snapdragon\lib\libggml-htp.cat
 Verifying: .\pkg-snapdragon\lib\libggml-htp.cat
 

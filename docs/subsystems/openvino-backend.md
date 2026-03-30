@@ -1,3 +1,17 @@
+<!--
+@file: docs/subsystems/openvino-backend.md
+@doc_type: subsystem_reference
+@version: 1.0.0
+@title: Openvino Backend
+@summary: Overview and setup instructions for the Openvino Backend.
+@tags: [backend, openvino, subsystem, compute]
+@author: Registrar Prime
+@copyright: © 2026 Carlos Fundora
+@status: active
+@last_updated: 2026-03-29
+@changelog:
+- 2026-03-29 [@Registrar Prime]: Applied canonical metadata header and moved to subsystems directory.
+-->
 # OpenVINO Backend for llama.cpp
 [OpenVINO](https://docs.openvino.ai/) is an open-source toolkit for optimizing and deploying high-performance AI inference, specifically designed for Intel hardware, including CPUs, GPUs, and NPUs, in the cloud, on-premises, and on the edge.
 This document describes the [OpenVINO backend for llama.cpp](../../src/ggml-openvino), which enables hardware-accelerated inference on **Intel® CPUs, GPUs, and NPUs** while remaining compatible with the existing **GGUF model ecosystem**. The backend translates GGML compute graphs into OpenVINO graphs and leverages graph compilation, kernel fusion, and device-specific optimizations to improve inference performance on supported Intel hardware.

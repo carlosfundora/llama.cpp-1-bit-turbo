@@ -1,4 +1,18 @@
-# GGML-VirtGPU Backend Configuration
+<!--
+@file: docs/reference/virtgpu-configuration-variables.md
+@doc_type: reference
+@version: 1.0.0
+@title: GGML-VirtGPU Configuration Variables Reference
+@summary: Reference for environment variables used by the VirtGPU backend system (frontend, hypervisor, and backend components).
+@tags: [virtgpu, reference, configuration, env-vars]
+@author: Registrar Prime
+@copyright: © 2026 Carlos Fundora
+@status: active
+@last_updated: 2026-03-29
+@changelog:
+- 2026-03-29 [@Registrar Prime]: Extracted configuration variables from VirtGPU/configuration.md to a dedicated reference doc.
+-->
+# GGML-VirtGPU Configuration Variables Reference
 
 This document describes the environment variables used by the ggml-virtgpu backend system, covering both the frontend (guest-side) and backend (host-side) components.
 

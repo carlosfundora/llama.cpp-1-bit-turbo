@@ -1,15 +1,29 @@
-# Hexagon backend developer details
+<!--
+@file: docs/engineering-notes/snapdragon-developer-details.md
+@doc_type: engineering_notes
+@version: 1.0.0
+@title: Hexagon Backend Developer Details
+@summary: In-depth technical details about the Hexagon NPU backend, memory management, and large model handling on Snapdragon platforms.
+@tags: [snapdragon, hexagon, architecture, backend, engineering-notes]
+@author: Registrar Prime
+@copyright: © 2026 Carlos Fundora
+@status: active
+@last_updated: 2026-03-29
+@changelog:
+- 2026-03-29 [@Registrar Prime]: Moved Snapdragon developer details into engineering notes.
+-->
+# Hexagon Backend Developer Details
 
-## Backend libraries
+## Backend Libraries
 
 The Hexagon backend consist of two parts:
 
-  - `libggml-hexagon`
-    This is the regular CPU-side GGML backend library, either shared or statically linked
+- `libggml-hexagon`
+  This is the regular CPU-side GGML backend library, either shared or statically linked
 
-  - `libggml-htp-vNN`
-    This is the NPU-side (HTP stands for Hexagon Tensor Processor) shared library that contains the Op dispatcher and kernels.
-    The correct library is selected automatically at runtime based on the HW version.
+- `libggml-htp-vNN`
+  This is the NPU-side (HTP stands for Hexagon Tensor Processor) shared library that contains the Op dispatcher and kernels.
+  The correct library is selected automatically at runtime based on the HW version.
 
 Here is an example of the build artifacts
 
@@ -24,7 +38,7 @@ pkg-adb/llama.cpp/lib/libggml-htp-v79.so
 pkg-adb/llama.cpp/lib/libggml-htp-v81.so
 ```
 
-## Memory buffers
+## Memory Buffers
 
 Hexagon NPU backend takes advantage of the Snapdragon's unified memory model where all buffers are fully accessible by the CPU and GPU.
 The NPU does have a dedicated tightly-coupled memory called VTCM but that memory is used only for intermediate data (e.g. dynamically
@@ -37,7 +51,7 @@ The backend does allocates non-host buffers for the tensors with datatypes that 
 From the MMU perspective these buffers are still regular buffers (normal access by the CPU) they are marked as non-host simply to force
 the repacking.
 
-## Large model handling
+## Large Model Handling
 
 Hexagon NPU session (aka Process Domain (PD) in the Hexagon docs) is limited to a memory mapping of around 3.5GB.
 In llama.cpp/GGML the Hexagon session is mapped to a single GGML backend device (HTP0, HTP1, etc).

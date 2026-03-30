@@ -1,6 +1,20 @@
-# Development and Testing
+<!--
+@file: docs/engineering-notes/virtgpu-development.md
+@doc_type: engineering_notes
+@version: 1.0.0
+@title: VirtGPU Backend Development & Testing Notes
+@summary: Development, testing procedures, code generation, and test environments for the VirtGPU backend.
+@tags: [virtgpu, testing, engineering-notes, development]
+@author: Registrar Prime
+@copyright: © 2026 Carlos Fundora
+@status: active
+@last_updated: 2026-03-29
+@changelog:
+- 2026-03-29 [@Registrar Prime]: Moved development and testing instructions to specialized engineering notes.
+-->
+# VirtGPU Development and Testing
 
-## Development
+## Development Procedures
 
 ### Code Generation
 
@@ -19,7 +33,7 @@ python regenerate_remoting.py
 3. Implement guest-side forwarding in `virtgpu-forward-*.cpp`
 4. Implement host-side handling in `backend-dispatched-*.cpp`
 
-## Testing
+## Testing Instructions
 
 This document provides instructions for building and testing the GGML-VirtGPU backend on macOS with containers.
 

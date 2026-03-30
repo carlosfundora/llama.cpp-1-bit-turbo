@@ -1,3 +1,17 @@
+<!--
+@file: docs/subsystems/sycl-backend.md
+@doc_type: subsystem_reference
+@version: 1.0.0
+@title: Sycl Backend
+@summary: Overview and setup instructions for the Sycl Backend.
+@tags: [backend, sycl, subsystem, compute]
+@author: Registrar Prime
+@copyright: © 2026 Carlos Fundora
+@status: active
+@last_updated: 2026-03-29
+@changelog:
+- 2026-03-29 [@Registrar Prime]: Applied canonical metadata header and moved to subsystems directory.
+-->
 # llama.cpp for SYCL
 
 - [Background](#background)
