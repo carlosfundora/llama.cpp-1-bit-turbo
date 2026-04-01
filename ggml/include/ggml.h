@@ -434,7 +434,8 @@ extern "C" {
         GGML_TYPE_PLANAR4_0 = 45, // RotorQuant 4-bit planar (Givens-rotation, 16 centroids)
         GGML_TYPE_ISO3_0    = 46, // RotorQuant 3-bit isometric (Hadamard, 8 centroids, sign-mag split)
         GGML_TYPE_ISO4_0    = 47, // RotorQuant 4-bit isometric (Hadamard, 16 centroids)
-        GGML_TYPE_COUNT   = 48,
+        GGML_TYPE_TQ3_0   = 48, // TurboQuant 3-bit polar + QJL (no per-block scale)
+        GGML_TYPE_COUNT   = 49,
     };
 
     // precision
