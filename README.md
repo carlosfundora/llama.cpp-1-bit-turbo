@@ -15,7 +15,7 @@
 - Dramatically reduces VRAM for KV cache, enabling larger contexts on memory-constrained GPUs
 - Ported from llama-turboquant research into production GGML kernels
 
-### 📦 PrismML Q1_0 1-Bit Quantization
+### 📦 PrismML 1-Bit Quantization
 
 - Native Q1_0 and Q1_0_G128 ternary quantization support (-1, 0, +1)
 - CPU dequantization and dot-product kernels for 1-bit inference
@@ -27,10 +27,9 @@
 - ROCm loader test harness and KV guardrail tests
 - Tested on AMD RX 6700 XT (gfx1030, 12GB VRAM)
 
-### 🎵 LFM2.5 Audio Pipeline (WIP)
+### 🎵 LFM2.5-Audio-1.5B Pipeline (WIP)
 
-- Experimental audio model support on `audio/lfm2.5-bringup` branch
-- Liquid Foundation Model 2.5 audio inference integration
+- Liquid Foundation Model 2.5 audio integration
 
 ### Branches
 
