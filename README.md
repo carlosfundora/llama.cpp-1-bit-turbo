@@ -1,34 +1,72 @@
-# llama.cpp
-
-![llama](https://user-images.githubusercontent.com/1991296/230134379-7181e485-c521-4d23-a0d6-f7b3b61ba524.png)
+<div align="center">
+<img src="media/llama-cpp-1bit-turbo-eagle.png" alt="llama.cpp 1-Bit Turbo EAGLE" width="600"></img>
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Release](https://img.shields.io/github/v/release/ggml-org/llama.cpp)](https://github.com/ggml-org/llama.cpp/releases)
-[![Server](https://github.com/ggml-org/llama.cpp/actions/workflows/server.yml/badge.svg)](https://github.com/ggml-org/llama.cpp/actions/workflows/server.yml)
 
-[Manifesto](https://github.com/ggml-org/llama.cpp/discussions/205) / [ggml](https://github.com/ggml-org/ggml) / [ops](https://github.com/ggml-org/llama.cpp/blob/master/docs/ops.md)
+---
 
-LLM inference in C/C++
+## A fork of [llama.cpp](https://github.com/ggml-org/llama.cpp) optimized for 1-bit quantized model inference with TurboQuant compression and EAGLE speculative decoding on AMD ROCm GPUs.
 
-## Recent API changes
+</div>
 
-- [Changelog for `libllama` API](https://github.com/ggml-org/llama.cpp/issues/9289)
-- [Changelog for `llama-server` REST API](https://github.com/ggml-org/llama.cpp/issues/9291)
+### 🧊 TurboQuant KV Cache Compression (TQ3_0)
 
-## Hot topics
+- Custom TQ3_0 3-bit KV cache quantization type using Walsh-Hadamard Transform (WHT) rotation + codebook compression
+- Dramatically reduces VRAM for KV cache, enabling larger contexts on memory-constrained GPUs
+- Ported from llama-turboquant research into production GGML kernels
 
-- **Hugging Face cache migration: models downloaded with `-hf` are now stored in the standard Hugging Face cache directory, enabling sharing with other HF tools.**
-- **[guide : using the new WebUI of llama.cpp](https://github.com/ggml-org/llama.cpp/discussions/16938)**
-- [guide : running gpt-oss with llama.cpp](https://github.com/ggml-org/llama.cpp/discussions/15396)
-- [[FEEDBACK] Better packaging for llama.cpp to support downstream consumers 🤗](https://github.com/ggml-org/llama.cpp/discussions/15313)
-- Support for the `gpt-oss` model with native MXFP4 format has been added | [PR](https://github.com/ggml-org/llama.cpp/pull/15091) | [Collaboration with NVIDIA](https://blogs.nvidia.com/blog/rtx-ai-garage-openai-oss) | [Comment](https://github.com/ggml-org/llama.cpp/discussions/15095)
-- Multimodal support arrived in `llama-server`: [#12898](https://github.com/ggml-org/llama.cpp/pull/12898) | [documentation](./docs/multimodal.md)
-- VS Code extension for FIM completions: https://github.com/ggml-org/llama.vscode
-- Vim/Neovim plugin for FIM completions: https://github.com/ggml-org/llama.vim
-- Hugging Face Inference Endpoints now support GGUF out of the box! https://github.com/ggml-org/llama.cpp/discussions/9669
-- Hugging Face GGUF editor: [discussion](https://github.com/ggml-org/llama.cpp/discussions/9268) | [tool](https://huggingface.co/spaces/CISCai/gguf-editor)
+### 📦 PrismML Q1_0 1-Bit Quantization
 
-----
+- Native Q1_0 and Q1_0_G128 ternary quantization support (-1, 0, +1)
+- CPU dequantization and dot-product kernels for 1-bit inference
+- Enables serving [PrismML Bonsai](https://huggingface.co/PrismML) 1-bit GGUF models
+
+### 🔧 ROCm Hardening for RDNA2
+
+- Null context guard for model loading failures (fail-fast on OOM)
+- ROCm loader test harness and KV guardrail tests
+- Tested on AMD RX 6700 XT (gfx1030, 12GB VRAM)
+
+### 🎵 LFM2.5 Audio Pipeline (WIP)
+
+- Experimental audio model support on `audio/lfm2.5-bringup` branch
+- Liquid Foundation Model 2.5 audio inference integration
+
+### Branches
+
+| Branch | What |
+|--------|------|
+| `master` | Main branch, tracking upstream b8640 + TQ3_0 + Q1_0 + null-context-guard |
+| `audio/lfm2.5-bringup` | LFM2.5 audio pipeline (4185 insertions, 27 files) |
+| `review/rocm-hardening` | ROCm test harness and KV guardrails |
+| `review/rocm-null-context-guard-fixed` | Null context guard (merged to master) |
+
+### Quick Start (ROCm)
+
+```bash
+git clone https://github.com/carlosfundora/llama.cpp-1-bit-turbo.git
+cd llama.cpp-1-bit-turbo
+
+# Build with ROCm HIP support
+cmake -B build -DGGML_HIP=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release -j$(nproc)
+
+# Serve a PrismML 1-bit model
+./build/bin/llama-server \
+  -m /path/to/Bonsai-1.7B-Q1_0.gguf \
+  --host 0.0.0.0 --port 8080
+```
+
+### Environment Variables (ROCm)
+
+```bash
+export HSA_OVERRIDE_GFX_VERSION=10.3.0    # Required for gfx1030
+export PYTORCH_ROCM_ARCH=gfx1030
+```
+
+---
+
+## Upstream README
 
 ## Quick start
 
