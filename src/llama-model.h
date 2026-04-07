@@ -232,6 +232,9 @@ struct llama_layer {
     struct ggml_tensor * ssm_b_norm      = nullptr;
     struct ggml_tensor * ssm_c_norm      = nullptr;
 
+    // eagle3
+    struct ggml_tensor * eagle3_hidden_norm = nullptr;
+
     // attention
     struct ggml_tensor * wq        = nullptr;
     struct ggml_tensor * wk        = nullptr;
@@ -539,6 +542,11 @@ struct llama_model {
     struct ggml_tensor * altup_unembd_proj    = nullptr;
     struct ggml_tensor * per_layer_model_proj = nullptr;
     struct ggml_tensor * per_layer_proj_norm  = nullptr;
+
+    // EAGLE3 speculative decode
+    struct ggml_tensor * fc               = nullptr; // encoder fc projection [hidden, 3*hidden]
+    struct ggml_tensor * target_tok_embd  = nullptr; // target model's token embeddings (if different)
+    struct ggml_tensor * d2t              = nullptr; // draft-to-target vocab mapping [vocab]
 
     std::vector<llama_layer> layers;
 

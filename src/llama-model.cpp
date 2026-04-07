@@ -2588,6 +2588,19 @@ void llama_model::load_hparams(llama_model_loader & ml) {
                     default: type = LLM_TYPE_UNKNOWN;
                 }
             } break;
+        case LLM_ARCH_EAGLE3:
+            {
+                ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps);
+
+                // eagle3 specific params
+                ml.get_key(LLM_KV_EAGLE3_TARGET_HIDDEN_SIZE,     hparams.eagle3_target_hidden_size, false);
+                ml.get_key(LLM_KV_EAGLE3_NORM_BEFORE_RESIDUAL,   hparams.eagle3_norm_before_residual, false);
+
+                // extract layer IDs from GGUF metadata
+                ml.get_key_or_arr(LLM_KV_EAGLE3_EXTRACT_LAYERS, hparams.eagle3_extract_layers, 3, false);
+
+                type = LLM_TYPE_UNKNOWN; // EAGLE3 models don't have a standard size classification
+            } break;
         default: throw std::runtime_error("unsupported model architecture: " + arch_name());
     }
 
@@ -7624,6 +7637,52 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
                         layer.ffn_up   = create_tensor(tn(LLM_TENSOR_FFN_UP,   "weight", i), {n_embd,   n_ff}, 0);
                     }
                 } break;
+            case LLM_ARCH_EAGLE3:
+                {
+                    // EAGLE3 encoder + decoder for speculative decoding
+                    // hidden_size = n_embd, encoder input = 3*n_embd (concat of 3 target hidden states)
+                    const int64_t n_embd_fc_in = 3 * n_embd; // fc input: 3 extracted hidden states concatenated
+
+                    tok_embd = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD, "weight"), {n_embd, n_vocab}, 0);
+
+                    // output
+                    output_norm = create_tensor(tn(LLM_TENSOR_OUTPUT_NORM, "weight"), {n_embd}, 0);
+                    output      = create_tensor(tn(LLM_TENSOR_OUTPUT,      "weight"), {n_embd, n_vocab}, TENSOR_NOT_REQUIRED);
+                    if (output == NULL) {
+                        output = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD, "weight"), {n_embd, n_vocab}, TENSOR_DUPLICATED);
+                    }
+
+                    // encoder fc projection: [hidden, 3*hidden]
+                    fc = create_tensor(tn(LLM_TENSOR_EAGLE3_FC, "weight"), {n_embd_fc_in, n_embd}, 0);
+
+                    // draft-to-target vocab mapping (optional)
+                    d2t = create_tensor(tn(LLM_TENSOR_EAGLE3_D2T, "weight"), {n_vocab}, TENSOR_NOT_REQUIRED);
+
+                    // decoder: 1 transformer layer with 2*hidden input dim for attn
+                    const int64_t n_embd_2x = 2 * n_embd; // concat(token_embd_norm, g_embd_norm)
+                    for (int i = 0; i < n_layer; ++i) {
+                        auto & layer = layers[i];
+
+                        // hidden norm for g_embeddings input
+                        layer.eagle3_hidden_norm = create_tensor(tn(LLM_TENSOR_EAGLE3_HIDDEN_NORM, "weight", i), {n_embd}, 0);
+
+                        // attention: pre-attn norm applies to token_embd only (n_embd, NOT 2*n_embd)
+                        // The 2*hidden concat happens AFTER separate norms on each component
+                        layer.attn_norm = create_tensor(tn(LLM_TENSOR_ATTN_NORM, "weight", i), {n_embd}, 0);
+                        layer.wq = create_tensor(tn(LLM_TENSOR_ATTN_Q,   "weight", i), {n_embd_2x, n_embd_head_k * n_head}, 0);
+                        layer.wk = create_tensor(tn(LLM_TENSOR_ATTN_K,   "weight", i), {n_embd_2x, n_embd_k_gqa}, 0);
+                        layer.wv = create_tensor(tn(LLM_TENSOR_ATTN_V,   "weight", i), {n_embd_2x, n_embd_v_gqa}, 0);
+                        layer.wo = create_tensor(tn(LLM_TENSOR_ATTN_OUT, "weight", i), {n_embd_head_k * n_head, n_embd}, 0);
+
+                        // FFN: standard hidden dim
+                        layer.ffn_norm = create_tensor(tn(LLM_TENSOR_FFN_NORM, "weight", i), {n_embd}, 0);
+                        layer.ffn_gate = create_tensor(tn(LLM_TENSOR_FFN_GATE, "weight", i), {n_embd, n_ff}, 0);
+                        layer.ffn_down = create_tensor(tn(LLM_TENSOR_FFN_DOWN, "weight", i), {n_ff, n_embd}, 0);
+                        layer.ffn_up   = create_tensor(tn(LLM_TENSOR_FFN_UP,   "weight", i), {n_embd, n_ff}, 0);
+
+                        layer.rope_freqs = create_tensor(tn(LLM_TENSOR_ROPE_FREQS, "weight", i), {n_rot/2}, TENSOR_NOT_REQUIRED | (i != 0 ? TENSOR_DUPLICATED : 0));
+                    }
+                } break;
             default:
                 throw std::runtime_error("unknown architecture");
         }
@@ -8908,6 +8967,10 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
             {
                 llm = std::make_unique<llm_build_step35_iswa>(*this, params);
             } break;
+        case LLM_ARCH_EAGLE3:
+            {
+                llm = std::make_unique<llm_build_eagle3_decode>(*this, params);
+            } break;
         default:
             GGML_ABORT("fatal error");
     }
@@ -9094,6 +9157,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
         case LLM_ARCH_LLAMA_EMBED:
         case LLM_ARCH_MAINCODER:
         case LLM_ARCH_GLM_DSA:
+        case LLM_ARCH_EAGLE3:
             return LLAMA_ROPE_TYPE_NORM;
 
         // the pairs of head values are offset by n_rot/2
