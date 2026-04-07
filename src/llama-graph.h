@@ -78,9 +78,9 @@ struct llama_eagle3 {
     std::vector<int> extract_layer_indices;
 
     // Extracted features from target model (for encoder input)
-    // Concatenated [layer_l, layer_m, layer_h] embeddings
-    // Shape: [n_layers * n_embd, n_tokens] where n_layers = extract_layer_indices.size()
+    // Layout: [layer0: n_embd*n_tokens, layer1: n_embd*n_tokens, layer2: n_embd*n_tokens]
     std::vector<float> target_features;
+    int32_t n_tokens_last_batch = 0;  // number of tokens in last extraction batch
 
     // Encoder output (for decoder input)
     std::vector<float> g_embeddings;
@@ -92,6 +92,7 @@ struct llama_eagle3 {
         target_features.clear();
         g_embeddings.clear();
         extract_tensors.clear();
+        n_tokens_last_batch = 0;
     }
 };
 

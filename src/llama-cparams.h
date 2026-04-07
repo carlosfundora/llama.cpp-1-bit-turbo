@@ -39,7 +39,7 @@ struct llama_cparams {
     bool op_offload;
     bool kv_unified;
     bool pipeline_parallel;
-    bool eagle3_extract_enabled;
+    bool eagle3_extract_enabled = false;
 
     enum llama_pooling_type pooling_type;
 

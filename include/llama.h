@@ -1053,6 +1053,17 @@ extern "C" {
                      const float * data,
                          int32_t   n_tokens);
 
+    // Get the number of auxiliary layers used by an EAGLE3 model for feature extraction.
+    LLAMA_API int32_t llama_model_eagle3_n_aux_layers(const struct llama_model * model);
+
+    // Copy the EAGLE3 fc.weight tensor to a host F32 buffer.
+    // buf must point to n_embd * fc_input_size floats.
+    // Returns fc_input_size (= n_aux_layers * target_n_embd), or 0 on error.
+    LLAMA_API int64_t llama_model_eagle3_get_fc_weight(
+            const struct llama_model * model,
+                               float * buf,
+                             int64_t   buf_size);
+
     //
     // backend sampling API [EXPERIMENTAL]
     // note: use only if the llama_context was created with at least one llama_sampler_seq_config

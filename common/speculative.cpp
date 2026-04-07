@@ -448,8 +448,79 @@ struct common_speculative_state_draft : public common_speculative_state {
     }
 };
 
+// EAGLE3 speculative decoding: extract target hidden states → FC encode → decode+sample loop
 struct common_speculative_state_eagle3 : public common_speculative_state {
-    common_speculative_state_eagle3(enum common_speculative_type type) : common_speculative_state(type) {}
+    llama_context * ctx_tgt;
+    llama_context * ctx_dft;
+
+    common_sampler * smpl;
+
+    llama_batch  batch;
+
+    // FC weight dequantized to host F32 for CPU matmul
+    std::vector<float> fc_weight_f32;
+    int64_t n_embd;        // EAGLE3 hidden dim (e.g. 2560)
+    int64_t fc_input_size; // n_aux_layers * n_embd_tgt (e.g. 7680)
+
+    common_speculative_state_eagle3(
+            enum common_speculative_type type,
+            llama_context * ctx_tgt,
+            llama_context * ctx_dft,
+            const llama_model * model_eagle3)
+        : common_speculative_state(type)
+        , ctx_tgt(ctx_tgt)
+        , ctx_dft(ctx_dft)
+    {
+        const auto * model_tgt = llama_get_model(ctx_tgt);
+
+        n_embd = llama_model_n_embd(model_eagle3);
+
+        // Compute fc_input_size from n_aux_layers × target n_embd
+        const int32_t n_aux = llama_model_eagle3_n_aux_layers(model_eagle3);
+        const int64_t n_embd_tgt = llama_model_n_embd(model_tgt);
+        fc_input_size = n_aux * n_embd_tgt;
+
+        batch = llama_batch_init(llama_n_batch(ctx_dft), 0, 1);
+
+        // Init sampler: top_k=10 for EAGLE3 draft tree
+        {
+            common_params_sampling params;
+            params.no_perf = false;
+            params.top_k = 10;
+            params.samplers = { COMMON_SAMPLER_TYPE_TOP_K };
+            smpl = common_sampler_init(model_eagle3, params);
+        }
+
+        // Enable target hidden state extraction
+        llama_set_eagle3(ctx_tgt, model_eagle3);
+
+        // Enable embeddings output on decoder for autoregressive recurrence
+        llama_set_embeddings(ctx_dft, true);
+
+        // Dequantize fc.weight to host F32 via public API
+        {
+            const int64_t n_elements = n_embd * fc_input_size;
+            fc_weight_f32.resize(n_elements);
+
+            int64_t fc_in = llama_model_eagle3_get_fc_weight(model_eagle3,
+                    fc_weight_f32.data(), n_elements);
+
+            GGML_ASSERT(fc_in == fc_input_size && "fc.weight dimensions mismatch");
+
+            LOG_INF("%s: EAGLE3 fc.weight loaded: [%lld x %lld] → host F32\n",
+                    __func__, (long long)n_embd, (long long)fc_input_size);
+        }
+
+        LOG_INF("%s: EAGLE3 speculative state initialized (n_embd=%lld, fc_in=%lld)\n",
+                __func__, (long long)n_embd, (long long)fc_input_size);
+    }
+
+    ~common_speculative_state_eagle3() override {
+        llama_perf_context_print(ctx_dft);
+        llama_free(ctx_dft);
+        common_sampler_free(smpl);
+        llama_batch_free(batch);
+    }
 
     void begin(const llama_tokens & prompt) override {
         GGML_UNUSED(prompt);
@@ -459,16 +530,145 @@ struct common_speculative_state_eagle3 : public common_speculative_state {
             const common_params_speculative & params,
             const llama_tokens & prompt_tgt,
             llama_token id_last,
-            llama_tokens & draft_tokens) override {
-        // TODO: implement
-        GGML_UNUSED(params);
-        GGML_UNUSED(prompt_tgt);
-        GGML_UNUSED(id_last);
-        GGML_UNUSED(draft_tokens);
+            llama_tokens & result) override {
+
+        auto * mem_dft = llama_get_memory(ctx_dft);
+
+        result.clear();
+        result.reserve(params.n_max);
+
+        // ---- Step 1: Get target features and do CPU FC projection ----
+        int32_t n_features = 0;
+        const float * all_features = llama_get_eagle3_target_features(ctx_tgt, &n_features);
+
+        if (!all_features || n_features == 0) {
+            LOG_DBG("%s: no target features available, cannot draft\n", __func__);
+            return;
+        }
+
+        const int n_aux_layers = (int)(fc_input_size / n_embd);
+        const int n_tokens_batch = n_features / (n_aux_layers * n_embd);
+        if (n_tokens_batch <= 0 || n_features != n_aux_layers * n_embd * n_tokens_batch) {
+            LOG_WRN("%s: feature count %d doesn't match layout\n", __func__, n_features);
+            return;
+        }
+
+        // Gather features for the last token from each layer
+        const int last_tok_idx = n_tokens_batch - 1;
+        std::vector<float> feat_concat(fc_input_size);
+        for (int layer = 0; layer < n_aux_layers; layer++) {
+            const float * layer_data = all_features + layer * n_embd * n_tokens_batch;
+            const float * tok_data = layer_data + last_tok_idx * n_embd;
+            memcpy(feat_concat.data() + layer * n_embd, tok_data, n_embd * sizeof(float));
+        }
+
+        // CPU FC projection: g_embd = fc_weight @ feat_concat
+        std::vector<float> g_embd(n_embd, 0.0f);
+        for (int64_t i = 0; i < n_embd; i++) {
+            float sum = 0.0f;
+            const float * row = fc_weight_f32.data() + i * fc_input_size;
+            for (int64_t j = 0; j < fc_input_size; j++) {
+                sum += row[j] * feat_concat[j];
+            }
+            g_embd[i] = sum;
+        }
+
+        // Diagnostic: g_embd stats
+        {
+            float gmin = g_embd[0], gmax = g_embd[0];
+            double gsum = 0;
+            for (int64_t j = 0; j < n_embd; j++) {
+                if (g_embd[j] < gmin) gmin = g_embd[j];
+                if (g_embd[j] > gmax) gmax = g_embd[j];
+                gsum += g_embd[j];
+            }
+            LOG_INF("EAGLE3: g_embd stats: min=%.4f max=%.4f avg=%.4f (n=%lld)\n",
+                    gmin, gmax, (float)(gsum / n_embd), (long long)n_embd);
+        }
+
+        // ---- Step 2: Fresh decode of id_last with g_embeddings ----
+        // Option A: Clear all decoder KV each round, sacrifice KV reuse for correctness.
+        // Use absolute position matching the token's place in the sequence.
+        // The EAGLE3 decoder gets context info from g_embeddings, not KV history.
+        llama_memory_clear(mem_dft, false);
+
+        const llama_pos pos_base = (llama_pos)prompt_tgt.size();
+
+        llama_set_eagle3_g_embeddings(ctx_dft, g_embd.data(), 1);
+
+        common_batch_clear(batch);
+        common_batch_add(batch, id_last, pos_base, { 0 }, true);
+
+        if (llama_decode(ctx_dft, batch) != 0) {
+            LOG_WRN("%s: decoder failed\n", __func__);
+            return;
+        }
+
+        // Diagnostic: logit spread
+        {
+            const float * logits = llama_get_logits_ith(ctx_dft, 0);
+            if (logits) {
+                float lmin = logits[0], lmax = logits[0];
+                int n_vocab = llama_vocab_n_tokens(llama_model_get_vocab(llama_get_model(ctx_dft)));
+                llama_token top_id = 0;
+                for (int v = 0; v < n_vocab; v++) {
+                    if (logits[v] < lmin) lmin = logits[v];
+                    if (logits[v] > lmax) { lmax = logits[v]; top_id = v; }
+                }
+                LOG_INF("EAGLE3: logit spread=%.2f (min=%.3f max=%.3f) top=%d '%s' pos=%d\n",
+                        lmax - lmin, lmin, lmax, top_id,
+                        common_token_to_piece(ctx_dft, top_id).c_str(), (int)pos_base);
+            }
+        }
+
+        // ---- Step 3: Sample and autoregressive loop ----
+        common_sampler_reset(smpl);
+
+        for (int i = 0; i < params.n_max; ++i) {
+            common_sampler_sample(smpl, ctx_dft, 0, true);
+
+            const auto * cur_p = common_sampler_get_candidates(smpl, true);
+
+            LOG_INF("EAGLE3 draft[%d]: top3 =", i);
+            for (int k = 0; k < std::min(3, (int) cur_p->size); ++k) {
+                LOG_INF(" %d/'%s'(%.3f)", cur_p->data[k].id,
+                        common_token_to_piece(ctx_dft, cur_p->data[k].id).c_str(),
+                        cur_p->data[k].p);
+            }
+            LOG_INF("\n");
+
+            const llama_token id = cur_p->data[0].id;
+            common_sampler_accept(smpl, id, true);
+
+            result.push_back(id);
+
+            if (params.n_max <= (int) result.size()) {
+                break;
+            }
+
+            if (cur_p->data[0].p < params.p_min) {
+                break;
+            }
+
+            // Autoregressive: prenorm output becomes next g_embeddings
+            const float * embd = llama_get_embeddings_ith(ctx_dft, -1);
+            if (!embd) {
+                LOG_WRN("%s: no embeddings from decoder at step %d\n", __func__, i);
+                break;
+            }
+            llama_set_eagle3_g_embeddings(ctx_dft, embd, 1);
+
+            common_batch_clear(batch);
+            common_batch_add(batch, id, pos_base + 1 + i, { 0 }, true);
+
+            if (llama_decode(ctx_dft, batch) != 0) {
+                LOG_WRN("%s: decoder failed at step %d\n", __func__, i);
+                break;
+            }
+        }
     }
 
     void accept(uint16_t n_accepted) override {
-        // noop
         GGML_UNUSED(n_accepted);
     }
 };
@@ -915,11 +1115,8 @@ common_speculative * common_speculative_init(
             configs.push_back(common_speculative_config(COMMON_SPECULATIVE_TYPE_NGRAM_CACHE, params));
         }
         if (has_draft_eagle3) {
-            // EAGLE3 Phase 1: use standard draft path — the EAGLE3 model has token_embd,
-            // attention, FFN, and lm_head so it can generate autoregressively.
-            // This won't have g_embeddings advantage but proves the pipeline works.
-            // Phase 2 will add hidden state extraction from target model.
-            configs.push_back(common_speculative_config(COMMON_SPECULATIVE_TYPE_DRAFT, params));
+            // EAGLE3: full speculative with target hidden state extraction + FC encode + decode
+            configs.push_back(common_speculative_config(COMMON_SPECULATIVE_TYPE_EAGLE3, params));
         } else if (has_draft) {
             configs.push_back(common_speculative_config(COMMON_SPECULATIVE_TYPE_DRAFT, params));
         }
@@ -941,7 +1138,11 @@ common_speculative * common_speculative_init(
                 break;
             }
             case COMMON_SPECULATIVE_TYPE_EAGLE3: {
-                impls.push_back(std::make_unique<common_speculative_state_eagle3>(config.type));
+                impls.push_back(std::make_unique<common_speculative_state_eagle3>(config.type,
+                    /* .ctx_tgt       = */ ctx_tgt,
+                    /* .ctx_dft       = */ ctx_dft,
+                    /* .model_eagle3  = */ llama_get_model(ctx_dft)
+                ));
                 break;
             }
             case COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE: {

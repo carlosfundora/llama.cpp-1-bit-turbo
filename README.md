@@ -9,22 +9,30 @@
 ## A fork of [llama.cpp](https://github.com/ggml-org/llama.cpp) optimized for 1-bit quantized model inference with TurboQuant compression and EAGLE speculative decoding on AMD ROCm GPUs.
 
 
+### 📦 PrismML 1-Bit Quantization (Q1_0_G128)
+
+- Native Q1_0_G128 ternary quantization support (-1, 0, +1) with 128-element groups
+- HIP/CUDA/Metal GPU dequantization and dot-product kernels
+- CPU fallback dequant and quantize-fns
+- Enables GPU inference of [PrismML Bonsai](https://huggingface.co/PrismML) 1-bit GGUF models
+- **Benchmarks (AMD RX 6700 XT):** Bonsai-1.7B 2152 pp / 209 tg · Bonsai-4B 867 pp / 122 tg · Bonsai-8B 454 pp / 92 tg
+
+### 🦅 EAGLE3 Speculative Decoding
+
+- Full EAGLE3 pipeline: hidden state extraction → FC encoder → 1-layer transformer decoder → autoregressive draft loop
+- GGUF converter for EAGLE3 safetensors (`convert_hf_to_gguf.py`)
+- Automatic weight tying (lm_head → token_embd) for EAGLE3 models
+- `spec_harness` reusable validation tool for any speculative draft model
+- Works with `llama-speculative-simple` — just pass `-md <eagle3.gguf>` alongside your target model
+
 ### 🧊 TurboQuant KV Cache Compression (TQ3_0)
 
 - Custom TQ3_0 3-bit KV cache quantization type using Walsh-Hadamard Transform (WHT) rotation + codebook compression
 - Dramatically reduces VRAM for KV cache, enabling larger contexts on memory-constrained GPUs
-- Ported from llama-turboquant research into production GGML kernels
-
-### 📦 PrismML 1-Bit Quantization
-
-- Native Q1_0 and Q1_0_G128 ternary quantization support (-1, 0, +1)
-- CPU dequantization and dot-product kernels for 1-bit inference
-- Enables serving [PrismML Bonsai](https://huggingface.co/PrismML) 1-bit GGUF models
 
 ### 🔧 ROCm Hardening for RDNA2
 
 - Null context guard for model loading failures (fail-fast on OOM)
-- ROCm loader test harness and KV guardrail tests
 - Tested on AMD RX 6700 XT (gfx1030, 12GB VRAM)
 
 ### 🎵 LFM2.5-Audio-1.5B Pipeline (WIP)
@@ -35,10 +43,8 @@
 
 | Branch | What |
 |--------|------|
-| `master` | Main branch, tracking upstream b8640 + TQ3_0 + Q1_0 + null-context-guard |
+| `master` | Main branch — Q1_0_G128 GPU kernels + EAGLE3 speculative decoding + TQ3_0 KV + ROCm hardening |
 | `audio/lfm2.5-bringup` | LFM2.5 audio pipeline (4185 insertions, 27 files) |
-| `review/rocm-hardening` | ROCm test harness and KV guardrails |
-| `review/rocm-null-context-guard-fixed` | Null context guard (merged to master) |
 
 ### Quick Start (ROCm)
 
@@ -631,3 +637,91 @@ $ echo "source ~/.llama-completion.bash" >> ~/.bashrc
 - [nlohmann/json](https://github.com/nlohmann/json) - Single-header JSON library, used by various tools/examples - MIT License
 - [miniaudio.h](https://github.com/mackron/miniaudio) - Single-header audio format decoder, used by multimodal subsystem - Public domain
 - [subprocess.h](https://github.com/sheredom/subprocess.h) - Single-header process launching solution for C and C++ - Public domain
+
+---
+
+## 1-Bit Turbo EAGLE — CLI Reference
+
+### EAGLE3 Speculative Decoding
+
+Run EAGLE3 speculative decoding with `llama-speculative-simple`:
+
+```bash
+# Basic EAGLE3 speculative decoding
+./build/bin/llama-speculative-simple \
+  -m /path/to/Bonsai-4B.gguf \
+  -md /path/to/Bonsai-4B-EAGLE3-f16.gguf \
+  -ngl 99 -ngld 99 \
+  -p "The capital of France is" \
+  -n 128
+
+# With FlashAttention enabled
+./build/bin/llama-speculative-simple \
+  -m /path/to/Bonsai-4B.gguf \
+  -md /path/to/Bonsai-4B-EAGLE3-f16.gguf \
+  -ngl 99 -ngld 99 --flash-attn \
+  -p "Write a Python function to compute fibonacci numbers" \
+  -n 256
+```
+
+| Flag | Description |
+|------|-------------|
+| `-m <path>` | Target model (Q1_0_G128 GGUF) |
+| `-md <path>` | EAGLE3 draft model (F16 or quantized GGUF) |
+| `-ngl <n>` | GPU layers for target model (99 = all) |
+| `-ngld <n>` | GPU layers for draft model (99 = all) |
+| `--flash-attn` / `-fa` | Enable FlashAttention |
+| `-n <n>` | Number of tokens to generate |
+| `-p <text>` | Prompt text |
+| `--draft-max <n>` | Max draft tokens per round (default: 5) |
+| `--draft-p-min <f>` | Min confidence to continue drafting (default: 0.5) |
+
+### Converting EAGLE3 Models to GGUF
+
+```bash
+# Convert EAGLE3 safetensors → GGUF (auto-detects EAGLE3 architecture)
+python convert_hf_to_gguf.py /path/to/Bonsai-4B-EAGLE3/ --outtype f16
+
+# Weight tying: lm_head is automatically skipped, runtime uses token_embd
+```
+
+### Speculative Harness (spec_harness) — Validation Tool
+
+Reusable tool for validating any speculative draft model against its target:
+
+```bash
+# Build
+cmake --build build --target llama-spec-harness
+
+# Capture target hidden states + tokens
+./build/bin/llama-spec-harness \
+  -m /path/to/Bonsai-4B.gguf -ngl 99 \
+  -p "The capital of France is" -n 50 \
+  -o /tmp/spec_capture.bin
+
+# Validate with Python reference decoder
+python scripts/spec_harness.py validate \
+  --capture /tmp/spec_capture.bin \
+  --eagle3-model /path/to/Bonsai-4B-EAGLE3/ \
+  --report
+```
+
+### Q1_0_G128 Benchmarks (AMD RX 6700 XT, gfx1030, 12GB)
+
+```
+Model           pp (t/s)    tg (t/s)    VRAM
+Bonsai-1.7B     2152        209         ~0.5 GB
+Bonsai-4B       867         122         ~1.1 GB
+Bonsai-8B       454         92          ~2.2 GB
+```
+
+### Environment
+
+```bash
+export HSA_OVERRIDE_GFX_VERSION=10.3.0   # Required for gfx1031 → gfx1030
+export GPU_TARGETS=gfx1030               # Build target
+
+# Build
+cmake -B build -DGGML_HIP=ON -DGPU_TARGETS=gfx1030 -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```

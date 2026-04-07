@@ -139,16 +139,20 @@ llm_build_eagle3_decode::llm_build_eagle3_decode(const llama_model & model, cons
 
     cur = inpL;
 
-    // Output norm
+    // Store PRENORM output for autoregressive g_embeddings recurrence.
+    // The speculative loop retrieves this via llama_get_embeddings_ith()
+    // and feeds it back as g_embeddings for the next decode step.
+    // Must be prenorm — the decoder applies hidden_norm to g_embd input.
+    // (Matches upstream PR-18039: t_embd = prenorm, BEFORE output_norm)
+    ggml_set_output(cur);
+    res->t_embd = cur;
+
+    // Output norm + lm_head → draft logits (post-norm, for sampling only)
     cur = build_norm(cur,
             model.output_norm, NULL,
             LLM_NORM_RMS, -1);
     cb(cur, "result_norm", -1);
 
-    // Store prenorm output for autoregressive g_embeddings chain
-    res->t_embd = cur;
-
-    // lm_head -> draft logits
     cur = build_lora_mm(model.output, cur);
     cb(cur, "result_output", -1);
     res->t_logits = cur;
