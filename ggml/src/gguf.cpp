@@ -648,6 +648,14 @@ struct gguf_context * gguf_init_from_file_ptr(FILE * file, struct gguf_init_para
         {
             ok = ok && gr.read(info.t.type);
 
+            // PrismML Bonsai GGUF files store Q1_0_g128=41 on disk.
+            // Upstream had COUNT=41 (not a real type), so 41 is unambiguous → remap to 43.
+            // Disk type 40 is ambiguous (NVFP4 upstream vs Q1_0 PrismML) — left as NVFP4.
+            // All current Bonsai models use only types 0 (F32) and 41 (Q1_0_g128).
+            if (info.t.type == (enum ggml_type)41) {
+                info.t.type = GGML_TYPE_Q1_0_g128;  // 43
+            }
+
             // check that tensor type is within defined range
             if (info.t.type < 0 || info.t.type >= GGML_TYPE_COUNT) {
                 GGML_LOG_ERROR("%s: tensor '%s' has invalid ggml type %d. should be in [0, %d)\n",
