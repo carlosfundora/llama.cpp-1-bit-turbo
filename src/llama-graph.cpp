@@ -342,6 +342,16 @@ void llm_graph_input_cross_embd::set_input(const llama_ubatch * ubatch) {
     }
 }
 
+void llm_graph_input_eagle3_g_embd::set_input(const llama_ubatch * ubatch) {
+    GGML_UNUSED(ubatch);
+
+    if (g_embd && eagle3 && !eagle3->g_embeddings.empty()) {
+        assert(g_embd->type == GGML_TYPE_F32);
+        const size_t nbytes = std::min(ggml_nbytes(g_embd), eagle3->g_embeddings.size() * sizeof(float));
+        ggml_backend_tensor_set(g_embd, eagle3->g_embeddings.data(), 0, nbytes);
+    }
+}
+
 static void print_mask(const float * data, int64_t n_tokens, int64_t n_kv, int64_t n_swa, llama_swa_type swa_type) {
     LLAMA_LOG_DEBUG("%s: === Attention mask ===\n", __func__);
     const char * swa_type_str = "unknown";
@@ -929,6 +939,7 @@ llm_graph_context::llm_graph_context(const llm_graph_params & params) :
     loras            (params.loras),
     mctx             (params.mctx),
     cross            (params.cross),
+    eagle3           (params.eagle3),
     samplers         (params.samplers),
     cb_func          (params.cb),
     res              (params.res),
@@ -1778,6 +1789,20 @@ ggml_tensor * llm_graph_context::build_inp_cross_embd() const {
     const auto n_enc  = !cross->v_embd.empty() ? cross->n_enc  : hparams.n_ctx_train;
 
     cur = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, n_enc);
+    ggml_set_input(cur);
+
+    res->add_input(std::move(inp));
+
+    return cur;
+}
+
+ggml_tensor * llm_graph_context::build_inp_eagle3_g_embd() const {
+    auto inp = std::make_unique<llm_graph_input_eagle3_g_embd>(eagle3, n_embd);
+
+    auto & cur = inp->g_embd;
+
+    // g_embeddings: [n_embd, n_tokens] — set by speculative loop before each decode
+    cur = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, n_tokens);
     ggml_set_input(cur);
 
     res->add_input(std::move(inp));

@@ -72,6 +72,29 @@ struct llama_cross {
     std::vector<std::set<llama_seq_id>> seq_ids_enc;
 };
 
+// EAGLE3 support - stores intermediate features from target model
+struct llama_eagle3 {
+    // Configuration: which layers to extract from target model
+    std::vector<int> extract_layer_indices;
+
+    // Extracted features from target model (for encoder input)
+    // Concatenated [layer_l, layer_m, layer_h] embeddings
+    // Shape: [n_layers * n_embd, n_tokens] where n_layers = extract_layer_indices.size()
+    std::vector<float> target_features;
+
+    // Encoder output (for decoder input)
+    std::vector<float> g_embeddings;
+
+    // Tensor references for feature extraction from target model
+    std::vector<ggml_tensor *> extract_tensors;
+
+    void clear() {
+        target_features.clear();
+        g_embeddings.clear();
+        extract_tensors.clear();
+    }
+};
+
 struct llm_graph_params;
 
 //
@@ -256,6 +279,21 @@ public:
     ggml_tensor * cross_embd; // F32 [n_embd, n_outputs_enc]
 
     const llama_cross * cross;
+};
+
+// EAGLE3: g_embeddings input for the decoder
+class llm_graph_input_eagle3_g_embd : public llm_graph_input_i {
+public:
+    llm_graph_input_eagle3_g_embd(
+            const llama_eagle3 * eagle3, int64_t n_embd) : eagle3(eagle3), n_embd(n_embd) {}
+    virtual ~llm_graph_input_eagle3_g_embd() = default;
+
+    void set_input(const llama_ubatch * ubatch) override;
+
+    ggml_tensor * g_embd = nullptr; // F32 [n_embd, n_tokens]
+
+    const llama_eagle3 * eagle3;
+    const int64_t n_embd;
 };
 
 class llm_graph_input_attn_no_cache : public llm_graph_input_i {
@@ -541,6 +579,7 @@ struct llm_graph_params {
     const llama_adapter_loras    * loras;
     const llama_memory_context_i * mctx;
     const llama_cross            * cross;
+    llama_eagle3                 * eagle3;  // non-const: we write extracted features here
 
     std::map<llama_seq_id, llama_sampler *> samplers;
 
@@ -623,6 +662,7 @@ struct llm_graph_params {
         return
             cparams.embeddings  == other.cparams.embeddings  &&
             cparams.causal_attn == other.cparams.causal_attn &&
+            cparams.eagle3_extract_enabled == other.cparams.eagle3_extract_enabled &&
             arch  == other.arch  &&
             gtype == other.gtype &&
             cvec  == other.cvec  &&
@@ -749,6 +789,7 @@ struct llm_graph_context {
     const llama_adapter_loras    * loras;
     const llama_memory_context_i * mctx;
     const llama_cross            * cross;
+    llama_eagle3                 * eagle3;  // non-const: we write extracted features here
 
     std::map<llama_seq_id, llama_sampler *> samplers;
 
@@ -865,6 +906,7 @@ struct llm_graph_context {
     ggml_tensor * build_inp_cls() const;
 
     ggml_tensor * build_inp_cross_embd() const;
+    ggml_tensor * build_inp_eagle3_g_embd() const;
     ggml_tensor * build_inp_pos_bucket_enc() const;
     ggml_tensor * build_inp_pos_bucket_dec() const;
     ggml_tensor * build_pos_bias(ggml_tensor * pos_bucket, ggml_tensor * attn_rel_b) const;

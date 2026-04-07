@@ -148,6 +148,21 @@ llm_build_llama<embed>::llm_build_llama(const llama_model & model, const llm_gra
         cur = build_cvec(cur, il);
         cb(cur, "l_out", il);
 
+        // EAGLE3: save layer output for hidden state extraction
+        if (eagle3 && !eagle3->extract_layer_indices.empty()) {
+            for (size_t ei = 0; ei < eagle3->extract_layer_indices.size(); ei++) {
+                if (eagle3->extract_layer_indices[ei] == il) {
+                    if (eagle3->extract_tensors.size() <= ei) {
+                        eagle3->extract_tensors.resize(ei + 1, nullptr);
+                    }
+                    // Mark as output so backend copies to host after compute
+                    ggml_set_output(cur);
+                    eagle3->extract_tensors[ei] = cur;
+                    break;
+                }
+            }
+        }
+
         // input for next layer
         inpL = cur;
     }
