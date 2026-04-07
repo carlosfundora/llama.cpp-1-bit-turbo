@@ -3220,9 +3220,12 @@ class LlamaEagle3Model(TextModel):
             yield ("token_embd.weight", data_torch)
             return
 
-        # Output head
+        # Output head — skip for EAGLE3: the lm_head is typically untrained
+        # (initialized but not updated during EAGLE3 training).
+        # The runtime falls back to tok_embd via weight tying (TENSOR_DUPLICATED).
+        # This produces correct logits since tok_embd IS the trained embedding.
         if name == "lm_head.weight":
-            yield ("output.weight", data_torch)
+            logger.info("EAGLE3: skipping lm_head.weight — using tok_embd via weight tying")
             return
 
         # Output norm

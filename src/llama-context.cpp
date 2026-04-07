@@ -1218,6 +1218,8 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
 
     if (!graph_reuse_disable && res->can_reuse(gparams)) {
         //LLAMA_LOG_DEBUG("%s: reusing previous graph\n", __func__);
+        LLAMA_LOG_WARN("%s: graph reused [%s], eagle3_extract=%d, extract_tensors=%zu\n", __func__,
+            model.name.c_str(), (int)cparams.eagle3_extract_enabled, eagle3.extract_tensors.size());
 
         // with pipeline parallelism, the previous graph_compute_async may still be running
         // on the GPU. we must synchronize before set_inputs to avoid overwriting input tensors
@@ -1236,6 +1238,9 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         //const auto t_start_us = ggml_time_us();
 
         gf = model.build_graph(gparams);
+        LLAMA_LOG_WARN("%s: graph REBUILT [%s], eagle3_extract=%d, extract_tensors=%zu, extract_layers=%zu\n", __func__,
+            model.name.c_str(), (int)cparams.eagle3_extract_enabled, eagle3.extract_tensors.size(),
+            eagle3.extract_layer_indices.size());
 
         //LLAMA_LOG_INFO("graph build time: %.3f ms\n", (ggml_time_us() - t_start_us)/1000.0);
 
@@ -1270,23 +1275,31 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
     }
 
     // EAGLE3: extract hidden states from target model layers after compute
-    if (cparams.eagle3_extract_enabled && !eagle3.extract_tensors.empty()) {
+    if (cparams.eagle3_extract_enabled) {
+        LLAMA_LOG_WARN("%s: EAGLE3 extraction check [%s]: enabled=%d, tensors=%zu\n", __func__,
+            model.name.c_str(), (int)cparams.eagle3_extract_enabled, eagle3.extract_tensors.size());
+        if (!eagle3.extract_tensors.empty()) {
         const int64_t n_embd = model.hparams.n_embd_inp();
         const int64_t n_tokens_batch = ubatch.n_tokens;
         const size_t n_layers = eagle3.extract_tensors.size();
 
         eagle3.target_features.resize(n_layers * n_embd * n_tokens_batch);
+        eagle3.n_tokens_last_batch = n_tokens_batch;
 
         for (size_t i = 0; i < n_layers; i++) {
             ggml_tensor * t = eagle3.extract_tensors[i];
             if (t) {
                 // Read computed tensor data from backend to host
+                const size_t tensor_bytes = ggml_nbytes(t);
+                const size_t wanted_bytes = n_embd * n_tokens_batch * sizeof(float);
+                const size_t copy_bytes = std::min(tensor_bytes, wanted_bytes);
                 ggml_backend_tensor_get(t,
                     eagle3.target_features.data() + i * n_embd * n_tokens_batch,
-                    0, n_embd * n_tokens_batch * sizeof(float));
+                    0, copy_bytes);
             }
         }
-    }
+        } // !eagle3.extract_tensors.empty()
+    } // eagle3_extract_enabled
 
     ret = GGML_STATUS_SUCCESS;
 
@@ -3177,6 +3190,52 @@ const float * llama_get_eagle3_target_features(llama_context * ctx_tgt, int32_t 
 
 void llama_set_eagle3_g_embeddings(llama_context * ctx_eagle3, const float * data, int32_t n_tokens) {
     ctx_eagle3->set_eagle3_g_embeddings(data, n_tokens);
+}
+
+int32_t llama_model_eagle3_n_aux_layers(const llama_model * model) {
+    int n = 0;
+    for (int i = 0; i < 3; i++) {
+        if (model->hparams.eagle3_extract_layers[i] >= 0) n++;
+    }
+    return n > 0 ? n : 3;
+}
+
+int64_t llama_model_eagle3_get_fc_weight(const llama_model * model, float * buf, int64_t buf_size) {
+    const ggml_tensor * fc = model->fc;
+    if (!fc) {
+        LLAMA_LOG_ERROR("%s: model has no fc.weight tensor\n", __func__);
+        return 0;
+    }
+
+    const int64_t n_embd        = fc->ne[1];
+    const int64_t fc_input_size = fc->ne[0];
+    const int64_t n_elements    = n_embd * fc_input_size;
+
+    if (buf_size < n_elements) {
+        LLAMA_LOG_ERROR("%s: buffer too small (%lld < %lld)\n", __func__,
+                (long long)buf_size, (long long)n_elements);
+        return 0;
+    }
+
+    if (fc->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_get(fc, buf, 0, n_elements * sizeof(float));
+    } else {
+        const size_t n_bytes = ggml_nbytes(fc);
+        std::vector<uint8_t> raw(n_bytes);
+        ggml_backend_tensor_get(fc, raw.data(), 0, n_bytes);
+
+        const auto * traits = ggml_get_type_traits(fc->type);
+        if (!traits->to_float) {
+            LLAMA_LOG_ERROR("%s: no dequant path for fc.weight type %d\n", __func__, (int)fc->type);
+            return 0;
+        }
+        traits->to_float(raw.data(), buf, n_elements);
+    }
+
+    LLAMA_LOG_INFO("%s: fc.weight [%lld x %lld] type=%d → F32 host\n", __func__,
+            (long long)n_embd, (long long)fc_input_size, (int)fc->type);
+
+    return fc_input_size;
 }
 
 bool llama_set_sampler(llama_context * ctx, llama_seq_id seq_id, llama_sampler * smpl) {
