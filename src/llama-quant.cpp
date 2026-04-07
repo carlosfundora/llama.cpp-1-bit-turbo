@@ -827,6 +827,10 @@ static ggml_type llama_ftype_get_default_type(llama_ftype ftype) {
         case LLAMA_FTYPE_MOSTLY_IQ3_S:
         case LLAMA_FTYPE_MOSTLY_IQ3_M:   return GGML_TYPE_IQ3_S;
 
+        case LLAMA_FTYPE_MOSTLY_NVFP4:       return GGML_TYPE_NVFP4;
+        case LLAMA_FTYPE_MOSTLY_Q1_0:        return GGML_TYPE_Q1_0;
+        case LLAMA_FTYPE_MOSTLY_Q1_0_g128:   return GGML_TYPE_Q1_0_g128;
+
         default: throw std::runtime_error(format("invalid output file type %d\n", ftype));
     }
 }
