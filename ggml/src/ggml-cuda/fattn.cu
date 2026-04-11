@@ -284,6 +284,12 @@ static void ggml_cuda_flash_attn_ext_vec(ggml_backend_cuda_context & ctx, ggml_t
     FATTN_VEC_CASES_ALL_D(GGML_TYPE_BF16, GGML_TYPE_BF16)
 #endif // GGML_CUDA_FA_ALL_QUANTS
 
+    // RotorQuant: F16 K + quantized V (always available)
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_F16, GGML_TYPE_PLANAR3_0)
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_F16, GGML_TYPE_PLANAR4_0)
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_F16, GGML_TYPE_ISO3_0)
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_F16, GGML_TYPE_ISO4_0)
+
     GGML_ABORT("fatal error");
 }
 
@@ -366,7 +372,12 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
 
 #ifndef GGML_CUDA_FA_ALL_QUANTS
     if (K->type != V->type) {
-        return BEST_FATTN_KERNEL_NONE;
+        // Allow F16 K with RotorQuant V types (always compiled)
+        const bool rotorquant_v = (V->type == GGML_TYPE_PLANAR3_0 || V->type == GGML_TYPE_PLANAR4_0 ||
+                                   V->type == GGML_TYPE_ISO3_0    || V->type == GGML_TYPE_ISO4_0);
+        if (!(rotorquant_v && (K->type == GGML_TYPE_F16 || K->type == GGML_TYPE_F32))) {
+            return BEST_FATTN_KERNEL_NONE;
+        }
     }
 #endif // GGML_CUDA_FA_ALL_QUANTS
 

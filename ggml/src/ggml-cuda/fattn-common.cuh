@@ -577,6 +577,172 @@ static __device__ __forceinline__ void dequantize_V_q8_0(const void * __restrict
     }
 }
 
+// RotorQuant: PlanarQuant 3-bit V dequantization (2-bit magnitude + 1-bit sign, QK=128)
+// Centroids: {0.125, 0.375, 0.625, 0.875} = (2*idx + 1) / 8
+template <typename T, int ne>
+static __device__ __forceinline__ void dequantize_V_planar3_0(const void * __restrict__ vx, void * __restrict__ dst, const int64_t i0) {
+    const block_planar3_0 * x = (const block_planar3_0 *) vx;
+
+    const int64_t ib  = i0 / QK_PLANAR3;
+    const int     pos = (int)(i0 % QK_PLANAR3);
+
+    const float norm = __half2float(x[ib].norm);
+    const float inv8_norm = norm * 0.125f;  // norm / 8
+
+    static_assert(ne == 2 || ne == 4, "bad ne");
+
+#ifdef FP16_AVAILABLE
+    if constexpr (std::is_same_v<T, half>) {
+#pragma unroll
+        for (int l0 = 0; l0 < ne; l0 += 2) {
+            float v[2];
+#pragma unroll
+            for (int k = 0; k < 2; ++k) {
+                const int p       = pos + l0 + k;
+                const int mag_idx = (x[ib].qs[p >> 2] >> (2 * (p & 3))) & 0x3;
+                const int sign    = (x[ib].signs[p >> 3] >> (p & 7)) & 0x1;
+                v[k] = (2 * mag_idx + 1) * inv8_norm * (sign ? -1.0f : 1.0f);
+            }
+            ((half2 *) dst)[l0/2] = make_half2(__float2half(v[0]), __float2half(v[1]));
+        }
+    } else
+#endif // FP16_AVAILABLE
+    if constexpr (std::is_same_v<T, float>) {
+#pragma unroll
+        for (int l = 0; l < ne; ++l) {
+            const int p       = pos + l;
+            const int mag_idx = (x[ib].qs[p >> 2] >> (2 * (p & 3))) & 0x3;
+            const int sign    = (x[ib].signs[p >> 3] >> (p & 7)) & 0x1;
+            ((float *) dst)[l] = (2 * mag_idx + 1) * inv8_norm * (sign ? -1.0f : 1.0f);
+        }
+    } else {
+        static_assert(std::is_same_v<T, void>, "bad type");
+    }
+}
+
+// RotorQuant: PlanarQuant 4-bit V dequantization (nibble-packed, QK=128)
+// val = (nibble - 7.5) * norm / 7.5
+template <typename T, int ne>
+static __device__ __forceinline__ void dequantize_V_planar4_0(const void * __restrict__ vx, void * __restrict__ dst, const int64_t i0) {
+    const block_planar4_0 * x = (const block_planar4_0 *) vx;
+
+    const int64_t ib  = i0 / QK_PLANAR4;
+    const int     pos = (int)(i0 % QK_PLANAR4);
+
+    const float scale = __half2float(x[ib].norm) / 7.5f;
+
+    static_assert(ne == 2 || ne == 4, "bad ne");
+
+#ifdef FP16_AVAILABLE
+    if constexpr (std::is_same_v<T, half>) {
+        const half2 d = __half2half2(__float2half(scale));
+#pragma unroll
+        for (int l0 = 0; l0 < ne; l0 += 2) {
+            float v[2];
+#pragma unroll
+            for (int k = 0; k < 2; ++k) {
+                const int p = pos + l0 + k;
+                const int nibble = (x[ib].qs[p >> 1] >> (4 * (p & 1))) & 0xF;
+                v[k] = (float)nibble - 7.5f;
+            }
+            ((half2 *) dst)[l0/2] = d * make_half2(__float2half(v[0]), __float2half(v[1]));
+        }
+    } else
+#endif // FP16_AVAILABLE
+    if constexpr (std::is_same_v<T, float>) {
+#pragma unroll
+        for (int l = 0; l < ne; ++l) {
+            const int p = pos + l;
+            const int nibble = (x[ib].qs[p >> 1] >> (4 * (p & 1))) & 0xF;
+            ((float *) dst)[l] = ((float)nibble - 7.5f) * scale;
+        }
+    } else {
+        static_assert(std::is_same_v<T, void>, "bad type");
+    }
+}
+
+// RotorQuant: IsoQuant 3-bit V dequantization (identical layout to planar3, different rotation context)
+template <typename T, int ne>
+static __device__ __forceinline__ void dequantize_V_iso3_0(const void * __restrict__ vx, void * __restrict__ dst, const int64_t i0) {
+    const block_iso3_0 * x = (const block_iso3_0 *) vx;
+
+    const int64_t ib  = i0 / QK_ISO3;
+    const int     pos = (int)(i0 % QK_ISO3);
+
+    const float norm = __half2float(x[ib].norm);
+    const float inv8_norm = norm * 0.125f;
+
+    static_assert(ne == 2 || ne == 4, "bad ne");
+
+#ifdef FP16_AVAILABLE
+    if constexpr (std::is_same_v<T, half>) {
+#pragma unroll
+        for (int l0 = 0; l0 < ne; l0 += 2) {
+            float v[2];
+#pragma unroll
+            for (int k = 0; k < 2; ++k) {
+                const int p       = pos + l0 + k;
+                const int mag_idx = (x[ib].qs[p >> 2] >> (2 * (p & 3))) & 0x3;
+                const int sign    = (x[ib].signs[p >> 3] >> (p & 7)) & 0x1;
+                v[k] = (2 * mag_idx + 1) * inv8_norm * (sign ? -1.0f : 1.0f);
+            }
+            ((half2 *) dst)[l0/2] = make_half2(__float2half(v[0]), __float2half(v[1]));
+        }
+    } else
+#endif // FP16_AVAILABLE
+    if constexpr (std::is_same_v<T, float>) {
+#pragma unroll
+        for (int l = 0; l < ne; ++l) {
+            const int p       = pos + l;
+            const int mag_idx = (x[ib].qs[p >> 2] >> (2 * (p & 3))) & 0x3;
+            const int sign    = (x[ib].signs[p >> 3] >> (p & 7)) & 0x1;
+            ((float *) dst)[l] = (2 * mag_idx + 1) * inv8_norm * (sign ? -1.0f : 1.0f);
+        }
+    } else {
+        static_assert(std::is_same_v<T, void>, "bad type");
+    }
+}
+
+// RotorQuant: IsoQuant 4-bit V dequantization (identical layout to planar4, different rotation context)
+template <typename T, int ne>
+static __device__ __forceinline__ void dequantize_V_iso4_0(const void * __restrict__ vx, void * __restrict__ dst, const int64_t i0) {
+    const block_iso4_0 * x = (const block_iso4_0 *) vx;
+
+    const int64_t ib  = i0 / QK_ISO4;
+    const int     pos = (int)(i0 % QK_ISO4);
+
+    const float scale = __half2float(x[ib].norm) / 7.5f;
+
+    static_assert(ne == 2 || ne == 4, "bad ne");
+
+#ifdef FP16_AVAILABLE
+    if constexpr (std::is_same_v<T, half>) {
+        const half2 d = __half2half2(__float2half(scale));
+#pragma unroll
+        for (int l0 = 0; l0 < ne; l0 += 2) {
+            float v[2];
+#pragma unroll
+            for (int k = 0; k < 2; ++k) {
+                const int p = pos + l0 + k;
+                const int nibble = (x[ib].qs[p >> 1] >> (4 * (p & 1))) & 0xF;
+                v[k] = (float)nibble - 7.5f;
+            }
+            ((half2 *) dst)[l0/2] = d * make_half2(__float2half(v[0]), __float2half(v[1]));
+        }
+    } else
+#endif // FP16_AVAILABLE
+    if constexpr (std::is_same_v<T, float>) {
+#pragma unroll
+        for (int l = 0; l < ne; ++l) {
+            const int p = pos + l;
+            const int nibble = (x[ib].qs[p >> 1] >> (4 * (p & 1))) & 0xF;
+            ((float *) dst)[l] = ((float)nibble - 7.5f) * scale;
+        }
+    } else {
+        static_assert(std::is_same_v<T, void>, "bad type");
+    }
+}
+
 template <ggml_type type_K, int D, int nthreads>
 constexpr __device__ vec_dot_KQ_t get_vec_dot_KQ() {
     if constexpr (type_K == GGML_TYPE_F16) {
@@ -615,6 +781,14 @@ constexpr __device__ dequantize_V_t get_dequantize_V() {
         return dequantize_V_q8_0<T, ne>;
     } else if constexpr (type_V == GGML_TYPE_BF16) {
         return dequantize_V_bf16<float, ne>;
+    } else if constexpr (type_V == GGML_TYPE_PLANAR3_0) {
+        return dequantize_V_planar3_0<T, ne>;
+    } else if constexpr (type_V == GGML_TYPE_PLANAR4_0) {
+        return dequantize_V_planar4_0<T, ne>;
+    } else if constexpr (type_V == GGML_TYPE_ISO3_0) {
+        return dequantize_V_iso3_0<T, ne>;
+    } else if constexpr (type_V == GGML_TYPE_ISO4_0) {
+        return dequantize_V_iso4_0<T, ne>;
     } else {
         static_assert(type_V == -1, "bad type");
         return nullptr;
