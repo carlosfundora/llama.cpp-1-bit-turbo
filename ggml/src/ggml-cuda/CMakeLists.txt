@@ -181,6 +181,18 @@ if (CUDAToolkit_FOUND)
         target_link_libraries(ggml-cuda PRIVATE CUDA::cuda_driver)
     endif()
 
+    if (GGML_TRITON)
+        # triton-loader.cu is auto-included via file(GLOB *.cu) above.
+        # Ensure triton_kernels AOT target runs before ggml-cuda is linked.
+        add_dependencies(ggml-cuda triton_kernels)
+        if (GGML_USE_HIP)
+            # HIP driver API is in the amdhip64 shared lib
+            target_link_libraries(ggml-cuda PRIVATE amdhip64)
+        else()
+            # CUDA driver already linked above (CUDA::cuda_driver)
+        endif()
+    endif()
+
     set(CUDA_CXX_FLAGS "")
 
     set(CUDA_FLAGS -use_fast_math -extended-lambda)

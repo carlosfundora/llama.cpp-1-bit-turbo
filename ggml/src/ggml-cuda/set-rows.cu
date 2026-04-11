@@ -1,6 +1,10 @@
 #include "set-rows.cuh"
 #include "cpy-utils.cuh"
 
+#ifdef GGML_TRITON
+#include "triton-loader.cuh"
+#endif
+
 typedef void (*set_rows_kernel_t)(const char * src, char * dst);
 
 // Generic quantized set_rows kernel template
@@ -313,6 +317,156 @@ static void set_rows_cuda(ggml_backend_cuda_context & ctx, const ggml_tensor * s
         GGML_ABORT("unsupported type %s", ggml_type_name(dst->type));
     }
 }
+
+
+#ifdef GGML_TRITON
+// ---------------------------------------------------------------------------
+// Triton dispatch helpers for fused RotorQuant set_rows kernels
+//
+// These functions are called by Track-A planar/iso set_rows implementations.
+// They attempt to dispatch to the pre-compiled Triton kernel first; callers
+// must fall back to the C++ path when they return false.
+//
+// Kernel file names follow the convention produced by triton_aot_compile.py:
+//   _fused_planar4_quant_pack_kernel_ng64_nl16.(hsaco|cubin)
+//   _fused_planar4_unpack_dequant_kernel_ng64.(hsaco|cubin)
+//   _fused_iso4_quant_pack_kernel_ng32_nl16.(hsaco|cubin)
+//   _fused_iso4_unpack_dequant_kernel_ng32.(hsaco|cubin)
+//
+// Kernel arguments mirror the Triton @triton.jit signatures exactly.
+// Compile-time constexprs (n_groups, n_levels, BLOCK_G) are baked into the
+// compiled binary; only runtime scalar args are passed via the void** array.
+// ---------------------------------------------------------------------------
+
+static bool try_triton_planar4_quant(
+    const half   * __restrict__ input,   // [batch, emb_dim] fp16
+    uint8_t      * __restrict__ packed,  // [batch, n_groups] uint8 output
+    const float  * __restrict__ rot2,    // [n_groups, 2]  cos/sin
+    const float  * __restrict__ centroids, // [16]
+    int32_t batch_size, int32_t emb_dim,
+    int32_t n_groups,                    // must match compiled n_groups=64
+    int32_t stride_in_b, int32_t stride_in_d,
+    int32_t stride_pack_b, int32_t stride_pack_g,
+    cudaStream_t stream)
+{
+    auto fn = ggml_triton::get_kernel("_fused_planar4_quant_pack_kernel_ng64_nl16");
+    if (!fn) return false;
+
+    void * args[] = {
+        (void*)&input, (void*)&packed,
+        (void*)&rot2, (void*)&centroids,
+        (void*)&batch_size, (void*)&emb_dim,
+        (void*)&stride_in_b, (void*)&stride_in_d,
+        (void*)&stride_pack_b, (void*)&stride_pack_g,
+    };
+
+    constexpr int BLOCK_G = 8;
+    dim3 grid(batch_size, (n_groups + BLOCK_G - 1) / BLOCK_G);
+    dim3 block(1);
+    ggml_triton::launch(fn, grid, block, args, 0, stream);
+    return true;
+}
+
+static bool try_triton_planar4_unpack_dequant(
+    const uint8_t * __restrict__ packed,    // [batch, n_groups] uint8
+    half          * __restrict__ output,    // [batch, emb_dim]  fp16
+    const float   * __restrict__ rot2,      // [n_groups, 2]
+    const float   * __restrict__ centroids, // [16]
+    const float   * __restrict__ norms,     // [batch]
+    int32_t batch_size, int32_t emb_dim,
+    int32_t n_groups,
+    int32_t stride_pack_b, int32_t stride_pack_g,
+    int32_t stride_out_b,  int32_t stride_out_d,
+    cudaStream_t stream)
+{
+    auto fn = ggml_triton::get_kernel("_fused_planar4_unpack_dequant_kernel_ng64");
+    if (!fn) return false;
+
+    void * args[] = {
+        (void*)&packed, (void*)&output,
+        (void*)&rot2, (void*)&centroids, (void*)&norms,
+        (void*)&batch_size, (void*)&emb_dim,
+        (void*)&stride_pack_b, (void*)&stride_pack_g,
+        (void*)&stride_out_b,  (void*)&stride_out_d,
+    };
+
+    constexpr int BLOCK_G = 8;
+    dim3 grid(batch_size, (n_groups + BLOCK_G - 1) / BLOCK_G);
+    dim3 block(1);
+    ggml_triton::launch(fn, grid, block, args, 0, stream);
+    return true;
+}
+
+static bool try_triton_iso4_quant(
+    const half   * __restrict__ input,     // [batch, d_padded] fp16
+    uint8_t      * __restrict__ packed,    // [batch, n_groups*2] uint8
+    const float  * __restrict__ qL,        // [n_groups, 4]
+    const float  * __restrict__ qR,        // [n_groups, 4]
+    const float  * __restrict__ centroids, // [16]
+    int32_t batch_size, int32_t d_padded,
+    int32_t n_groups,
+    int32_t stride_in_b, int32_t stride_in_d,
+    int32_t stride_pack_b, int32_t stride_pack_e,
+    cudaStream_t stream)
+{
+    auto fn = ggml_triton::get_kernel("_fused_iso4_quant_pack_kernel_ng32_nl16");
+    if (!fn) return false;
+
+    void * args[] = {
+        (void*)&input, (void*)&packed,
+        (void*)&qL, (void*)&qR, (void*)&centroids,
+        (void*)&batch_size, (void*)&d_padded,
+        (void*)&stride_in_b, (void*)&stride_in_d,
+        (void*)&stride_pack_b, (void*)&stride_pack_e,
+    };
+
+    constexpr int BLOCK_G = 8;
+    dim3 grid(batch_size, (n_groups + BLOCK_G - 1) / BLOCK_G);
+    dim3 block(1);
+    ggml_triton::launch(fn, grid, block, args, 0, stream);
+    return true;
+}
+
+static bool try_triton_iso4_unpack_dequant(
+    const uint8_t * __restrict__ packed,    // [batch, n_groups*2] uint8
+    half          * __restrict__ output,    // [batch, head_dim]   fp16
+    const float   * __restrict__ qL,        // [n_groups, 4]
+    const float   * __restrict__ qR,        // [n_groups, 4]
+    const float   * __restrict__ centroids, // [16]
+    const float   * __restrict__ norms,     // [batch]
+    int32_t batch_size, int32_t d_padded, int32_t head_dim,
+    int32_t n_groups,
+    int32_t stride_pack_b, int32_t stride_pack_e,
+    int32_t stride_out_b,  int32_t stride_out_d,
+    cudaStream_t stream)
+{
+    auto fn = ggml_triton::get_kernel("_fused_iso4_unpack_dequant_kernel_ng32");
+    if (!fn) return false;
+
+    void * args[] = {
+        (void*)&packed, (void*)&output,
+        (void*)&qL, (void*)&qR, (void*)&centroids, (void*)&norms,
+        (void*)&batch_size, (void*)&d_padded, (void*)&head_dim,
+        (void*)&stride_pack_b, (void*)&stride_pack_e,
+        (void*)&stride_out_b,  (void*)&stride_out_d,
+    };
+
+    constexpr int BLOCK_G = 8;
+    dim3 grid(batch_size, (n_groups + BLOCK_G - 1) / BLOCK_G);
+    dim3 block(1);
+    ggml_triton::launch(fn, grid, block, args, 0, stream);
+    return true;
+}
+
+// Suppress unused-function warnings until Track A wires these in.
+static void ggml_triton_suppress_unused_warnings() __attribute__((unused));
+static void ggml_triton_suppress_unused_warnings() {
+    (void)try_triton_planar4_quant;
+    (void)try_triton_planar4_unpack_dequant;
+    (void)try_triton_iso4_quant;
+    (void)try_triton_iso4_unpack_dequant;
+}
+#endif // GGML_TRITON
 
 
 void ggml_cuda_op_set_rows(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {

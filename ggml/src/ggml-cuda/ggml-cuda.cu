@@ -84,6 +84,10 @@
 #include <vector>
 #include <unordered_set>
 
+#ifdef GGML_TRITON
+#include "ggml-cuda/triton-loader.cuh"
+#endif
+
 static_assert(sizeof(half) == sizeof(ggml_fp16_t), "wrong fp16 size");
 
 [[noreturn]]
@@ -330,6 +334,11 @@ static ggml_cuda_device_info ggml_cuda_init() {
 
 const ggml_cuda_device_info & ggml_cuda_info() {
     static ggml_cuda_device_info info = ggml_cuda_init();
+#ifdef GGML_TRITON
+    // Load pre-compiled Triton kernels once, alongside device discovery.
+    static bool triton_initialized = (ggml_triton::init(), true);
+    (void)triton_initialized;
+#endif
     return info;
 }
 
