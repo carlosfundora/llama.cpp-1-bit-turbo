@@ -2,6 +2,8 @@
 #include "ggml-common.h"
 
 #include "ggml-quants.h"
+#include "ggml-planar-quant.h"
+#include "ggml-iso-quant.h"
 #include "ggml-impl.h"
 #include "ggml-cpu/ggml-cpu-impl.h"
 #include "ggml-cpu.h"
@@ -5469,6 +5471,36 @@ bool ggml_validate_row_data(enum ggml_type type, const void * data, size_t nbyte
         case GGML_TYPE_Q1_0_g128:
             {
                 VALIDATE_ROW_DATA_D_F16_IMPL(block_q1_0_g128, data, nb);
+            } break;
+        case GGML_TYPE_PLANAR3_0:
+            {
+                const block_planar3_0 * q = (const block_planar3_0 *)(data);
+                for (size_t i = 0; i < nb; ++i) {
+                    if (!validate_fp16(q[i].norm, i)) { return false; }
+                }
+            } break;
+        case GGML_TYPE_PLANAR4_0:
+            {
+                const block_planar4_0 * q = (const block_planar4_0 *)(data);
+                for (size_t i = 0; i < nb; ++i) {
+                    if (!validate_fp16(q[i].norm, i)) { return false; }
+                    if (!validate_fp16(q[i].rnorm, i)) { return false; }
+                }
+            } break;
+        case GGML_TYPE_ISO3_0:
+            {
+                const block_iso3_0 * q = (const block_iso3_0 *)(data);
+                for (size_t i = 0; i < nb; ++i) {
+                    if (!validate_fp16(q[i].norm, i)) { return false; }
+                }
+            } break;
+        case GGML_TYPE_ISO4_0:
+            {
+                const block_iso4_0 * q = (const block_iso4_0 *)(data);
+                for (size_t i = 0; i < nb; ++i) {
+                    if (!validate_fp16(q[i].norm, i)) { return false; }
+                    if (!validate_fp16(q[i].rnorm, i)) { return false; }
+                }
             } break;
         case GGML_TYPE_Q4_0:
             {

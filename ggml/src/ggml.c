@@ -9,6 +9,8 @@
 
 // FIXME: required here for quantization functions
 #include "ggml-quants.h"
+#include "ggml-planar-quant.h"
+#include "ggml-iso-quant.h"
 
 #ifdef GGML_USE_CPU_HBM
 #include <hbwmalloc.h>
@@ -666,6 +668,38 @@ static const struct ggml_type_traits type_traits[GGML_TYPE_COUNT] = {
         .is_quantized             = true,
         .to_float                 = (ggml_to_float_t) dequantize_row_q1_0_g128,
         .from_float_ref           = (ggml_from_float_t) quantize_row_q1_0_g128_ref,
+    },
+    [GGML_TYPE_PLANAR3_0] = {
+        .type_name                = "planar3",
+        .blck_size                = QK_PLANAR3,
+        .type_size                = sizeof(block_planar3_0),
+        .is_quantized             = true,
+        .to_float                 = (ggml_to_float_t) dequantize_row_planar3_0,
+        .from_float_ref           = (ggml_from_float_t) quantize_row_planar3_0_ref,
+    },
+    [GGML_TYPE_PLANAR4_0] = {
+        .type_name                = "planar4",
+        .blck_size                = QK_PLANAR4,
+        .type_size                = sizeof(block_planar4_0),
+        .is_quantized             = true,
+        .to_float                 = (ggml_to_float_t) dequantize_row_planar4_0,
+        .from_float_ref           = (ggml_from_float_t) quantize_row_planar4_0_ref,
+    },
+    [GGML_TYPE_ISO3_0] = {
+        .type_name                = "iso3",
+        .blck_size                = QK_ISO3,
+        .type_size                = sizeof(block_iso3_0),
+        .is_quantized             = true,
+        .to_float                 = (ggml_to_float_t) dequantize_row_iso3_0,
+        .from_float_ref           = (ggml_from_float_t) quantize_row_iso3_0_ref,
+    },
+    [GGML_TYPE_ISO4_0] = {
+        .type_name                = "iso4",
+        .blck_size                = QK_ISO4,
+        .type_size                = sizeof(block_iso4_0),
+        .is_quantized             = true,
+        .to_float                 = (ggml_to_float_t) dequantize_row_iso4_0,
+        .from_float_ref           = (ggml_from_float_t) quantize_row_iso4_0_ref,
     },
     [GGML_TYPE_Q4_0] = {
         .type_name                = "q4_0",
@@ -7672,6 +7706,10 @@ size_t ggml_quantize_chunk(
     switch (type) {
         case GGML_TYPE_Q1_0:    result = quantize_q1_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
         case GGML_TYPE_Q1_0_g128: result = quantize_q1_0_g128(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_PLANAR3_0: result = quantize_planar3_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_PLANAR4_0: result = quantize_planar4_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_ISO3_0:    result = quantize_iso3_0   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_ISO4_0:    result = quantize_iso4_0   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
         case GGML_TYPE_Q4_0:    result = quantize_q4_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
         case GGML_TYPE_Q4_1:    result = quantize_q4_1(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
         case GGML_TYPE_Q5_0:    result = quantize_q5_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;

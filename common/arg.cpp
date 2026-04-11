@@ -387,6 +387,10 @@ const std::vector<ggml_type> kv_cache_types = {
     GGML_TYPE_IQ4_NL,
     GGML_TYPE_Q5_0,
     GGML_TYPE_Q5_1,
+    GGML_TYPE_PLANAR3_0,
+    GGML_TYPE_PLANAR4_0,
+    GGML_TYPE_ISO3_0,
+    GGML_TYPE_ISO4_0,
 };
 
 static ggml_type kv_cache_type_from_str(const std::string & s) {
@@ -3489,7 +3493,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_examples({LLAMA_EXAMPLE_SPECULATIVE, LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_CLI}));
     add_opt(common_arg(
-        {"--spec-type"}, "[none|ngram-cache|ngram-simple|ngram-map-k|ngram-map-k4v|ngram-mod]",
+        {"--spec-type"}, "[none|ngram-cache|ngram-simple|ngram-map-k|ngram-map-k4v|ngram-mod|phantom]",
         string_format("type of speculative decoding to use when no draft model is provided (default: %s)\n",
             common_speculative_type_to_str(params.speculative.type).c_str()),
         [](common_params & params, const std::string & value) {
@@ -3505,6 +3509,8 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
                 params.speculative.type = COMMON_SPECULATIVE_TYPE_NGRAM_MAP_K4V;
             } else if (value == "ngram-mod") {
                 params.speculative.type = COMMON_SPECULATIVE_TYPE_NGRAM_MOD;
+            } else if (value == "phantom") {
+                params.speculative.type = COMMON_SPECULATIVE_TYPE_PHANTOM;
             } else {
                 throw std::invalid_argument("unknown speculative decoding type without draft model");
             }
@@ -3540,6 +3546,26 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.speculative.ngram_min_hits = value;
         }
     ).set_examples({LLAMA_EXAMPLE_SERVER}));
+    add_opt(common_arg(
+        {"--phantom-buffers"}, "N",
+        string_format("ghost buffer ring slots for phantom speculative decoding, 0 = disabled (default: %d)", params.speculative.phantom_buffers),
+        [](common_params & params, int value) {
+            if (value < 0 || value > 8) {
+                throw std::invalid_argument("phantom buffers must be 0-8");
+            }
+            params.speculative.phantom_buffers = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_PHANTOM_BUFFERS"));
+    add_opt(common_arg(
+        {"--phantom-bloom-bits"}, "N",
+        string_format("bloom filter size in bits for phantom speculative decoding (default: %d)", params.speculative.phantom_bloom_bits),
+        [](common_params & params, int value) {
+            if (value < 256 || value > 1048576) {
+                throw std::invalid_argument("phantom bloom bits must be 256-1048576");
+            }
+            params.speculative.phantom_bloom_bits = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_PHANTOM_BLOOM_BITS"));
     add_opt(common_arg(
         {"-ctkd", "--cache-type-k-draft"}, "TYPE",
         string_format(

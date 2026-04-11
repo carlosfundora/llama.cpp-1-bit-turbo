@@ -99,6 +99,12 @@ typedef sycl::half2 ggml_half2;
 #define QI1_0_g128 (QK1_0_g128 / 32)  // Number of int32s needed for QK1_0_g128 bits (QK1_0_g128/32)
 #define QR1_0_g128 1              // 1 bit per quantized element (matches the 1-bit nature of Q1_0_g128)
 
+// RotorQuant QR constants (elements decoded per dequantize call = 2; step between calls = 1)
+#define QR_PLANAR3 1  // dequantize_planar3_0 decodes 2 elements at iqs, iqs+1
+#define QR_PLANAR4 1  // dequantize_planar4_0 decodes 2 elements at iqs, iqs+1
+#define QR_ISO3    1  // dequantize_iso3_0 decodes 2 elements at iqs, iqs+1
+#define QR_ISO4    1  // dequantize_iso4_0 decodes 2 elements at iqs, iqs+1
+
 
 #define QI4_0 (QK4_0 / (4 * QR4_0))
 #define QR4_0 2
@@ -190,6 +196,50 @@ typedef struct {
     uint8_t qs[QK1_0_g128 / 8]; // bits / quants
 } block_q1_0_g128;
 static_assert(sizeof(block_q1_0_g128) == sizeof(ggml_half) + QK1_0_g128 / 8, "wrong q1_0_g128 block size/padding");
+
+// RotorQuant: PlanarQuant 3-bit (Givens-rotation, 8 centroids via 2-bit magnitude + 1-bit sign)
+#define QK_PLANAR3  128
+#define NL_PLANAR3    8
+typedef struct {
+    ggml_half norm;             // scale factor = max(|x|) over the block
+    uint8_t   qs[QK_PLANAR3/4]; // 32 bytes: 2-bit magnitude index per element, packed 4 per byte
+    uint8_t   signs[QK_PLANAR3/8]; // 16 bytes: 1 sign bit per element, packed 8 per byte
+} block_planar3_0;
+static_assert(sizeof(block_planar3_0) == sizeof(ggml_half) + QK_PLANAR3/4 + QK_PLANAR3/8,
+              "wrong block_planar3_0 size/padding");
+
+// RotorQuant: PlanarQuant 4-bit (Givens-rotation, 16 centroids, nibble-packed)
+#define QK_PLANAR4  128
+#define NL_PLANAR4   16
+typedef struct {
+    ggml_half norm;             // scale factor = max(|x|) over the block
+    ggml_half rnorm;            // reciprocal: 1/norm (precomputed for fast encode)
+    uint8_t   qs[QK_PLANAR4/2]; // 64 bytes: 4-bit index per element, nibble-packed
+} block_planar4_0;
+static_assert(sizeof(block_planar4_0) == 2*sizeof(ggml_half) + QK_PLANAR4/2,
+              "wrong block_planar4_0 size/padding");
+
+// RotorQuant: IsoQuant 3-bit (Hadamard/isometric rotation, 8 centroids via 2-bit magnitude + 1-bit sign)
+#define QK_ISO3  128
+#define NL_ISO3    8
+typedef struct {
+    ggml_half norm;           // scale factor = max(|x|) over the block
+    uint8_t   qs[QK_ISO3/4];  // 32 bytes: 2-bit magnitude index per element, packed 4 per byte
+    uint8_t   signs[QK_ISO3/8]; // 16 bytes: 1 sign bit per element, packed 8 per byte
+} block_iso3_0;
+static_assert(sizeof(block_iso3_0) == sizeof(ggml_half) + QK_ISO3/4 + QK_ISO3/8,
+              "wrong block_iso3_0 size/padding");
+
+// RotorQuant: IsoQuant 4-bit (Hadamard/isometric rotation, 16 centroids, nibble-packed)
+#define QK_ISO4  128
+#define NL_ISO4   16
+typedef struct {
+    ggml_half norm;           // scale factor = max(|x|) over the block
+    ggml_half rnorm;          // reciprocal: 1/norm (precomputed for fast encode)
+    uint8_t   qs[QK_ISO4/2];  // 64 bytes: 4-bit index per element, nibble-packed
+} block_iso4_0;
+static_assert(sizeof(block_iso4_0) == 2*sizeof(ggml_half) + QK_ISO4/2,
+              "wrong block_iso4_0 size/padding");
 
 #define QK4_0 32
 typedef struct {

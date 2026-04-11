@@ -430,7 +430,11 @@ extern "C" {
         GGML_TYPE_NVFP4   = 40, // NVFP4 (4 blocks, E4M3 scale)
         GGML_TYPE_Q1_0    = 42, // PrismML Bonsai 1-bit (32-element blocks)
         GGML_TYPE_Q1_0_g128 = 43, // PrismML Bonsai 1-bit (128-element blocks, group size 128)
-        GGML_TYPE_COUNT   = 44,
+        GGML_TYPE_PLANAR3_0 = 44, // RotorQuant 3-bit planar (Givens-rotation, 8 centroids, sign-mag split)
+        GGML_TYPE_PLANAR4_0 = 45, // RotorQuant 4-bit planar (Givens-rotation, 16 centroids)
+        GGML_TYPE_ISO3_0    = 46, // RotorQuant 3-bit isometric (Hadamard, 8 centroids, sign-mag split)
+        GGML_TYPE_ISO4_0    = 47, // RotorQuant 4-bit isometric (Hadamard, 16 centroids)
+        GGML_TYPE_COUNT   = 48,
     };
 
     // precision

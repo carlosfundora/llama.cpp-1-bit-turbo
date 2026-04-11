@@ -205,6 +205,10 @@ add_library(ggml-base
             ggml-threading.h
             ggml-quants.c
             ggml-quants.h
+            ggml-planar-quant.c
+            ggml-planar-quant.h
+            ggml-iso-quant.c
+            ggml-iso-quant.h
             gguf.cpp)
 
 set_target_properties(ggml-base PROPERTIES

@@ -121,3 +121,72 @@ static __device__ __forceinline__ void dequantize_q8_0(const void * vx, const in
     v.x *= d;
     v.y *= d;
 }
+
+// RotorQuant dequantize functions
+// planar3_0: norm(f16) + qs[32](2-bit mag) + signs[16](1-bit sign), 128 elements
+static __device__ __forceinline__ void dequantize_planar3_0(const void * vx, const int64_t ib, const int iqs, float2 & v) {
+    const block_planar3_0 * x = (const block_planar3_0 *) vx;
+    const float norm = __half2float(x[ib].norm);
+    // iqs is element index (0, 2, 4, ...) — returns pair at iqs and iqs+1
+    const int j0 = iqs;
+    const int j1 = iqs + 1;
+
+    // Centroids: 0.125, 0.375, 0.625, 0.875 (Lloyd-Max 4-level uniform [0,1])
+    const float centroids[4] = { 0.125f, 0.375f, 0.625f, 0.875f };
+
+    const int midx0 = (x[ib].qs[j0 / 4] >> ((j0 % 4) * 2)) & 0x3;
+    const int sign0 = (x[ib].signs[j0 / 8] >> (j0 % 8)) & 0x1;
+    v.x = sign0 ? -(centroids[midx0] * norm) : (centroids[midx0] * norm);
+
+    const int midx1 = (x[ib].qs[j1 / 4] >> ((j1 % 4) * 2)) & 0x3;
+    const int sign1 = (x[ib].signs[j1 / 8] >> (j1 % 8)) & 0x1;
+    v.y = sign1 ? -(centroids[midx1] * norm) : (centroids[midx1] * norm);
+}
+
+// planar4_0: norm(f16) + rnorm(f16) + qs[64](4-bit nibble-packed), 128 elements
+static __device__ __forceinline__ void dequantize_planar4_0(const void * vx, const int64_t ib, const int iqs, float2 & v) {
+    const block_planar4_0 * x = (const block_planar4_0 *) vx;
+    const float norm  = __half2float(x[ib].norm);
+    const float scale = norm / 7.5f;
+    const int j0 = iqs;
+    const int j1 = iqs + 1;
+
+    const int q0 = (j0 % 2 == 0) ? (x[ib].qs[j0 / 2] & 0xF) : ((x[ib].qs[j0 / 2] >> 4) & 0xF);
+    const int q1 = (j1 % 2 == 0) ? (x[ib].qs[j1 / 2] & 0xF) : ((x[ib].qs[j1 / 2] >> 4) & 0xF);
+
+    v.x = ((float)q0 - 7.5f) * scale;
+    v.y = ((float)q1 - 7.5f) * scale;
+}
+
+// iso3_0: identical layout to planar3_0
+static __device__ __forceinline__ void dequantize_iso3_0(const void * vx, const int64_t ib, const int iqs, float2 & v) {
+    const block_iso3_0 * x = (const block_iso3_0 *) vx;
+    const float norm = __half2float(x[ib].norm);
+    const int j0 = iqs;
+    const int j1 = iqs + 1;
+
+    const float centroids[4] = { 0.125f, 0.375f, 0.625f, 0.875f };
+
+    const int midx0 = (x[ib].qs[j0 / 4] >> ((j0 % 4) * 2)) & 0x3;
+    const int sign0 = (x[ib].signs[j0 / 8] >> (j0 % 8)) & 0x1;
+    v.x = sign0 ? -(centroids[midx0] * norm) : (centroids[midx0] * norm);
+
+    const int midx1 = (x[ib].qs[j1 / 4] >> ((j1 % 4) * 2)) & 0x3;
+    const int sign1 = (x[ib].signs[j1 / 8] >> (j1 % 8)) & 0x1;
+    v.y = sign1 ? -(centroids[midx1] * norm) : (centroids[midx1] * norm);
+}
+
+// iso4_0: identical layout to planar4_0
+static __device__ __forceinline__ void dequantize_iso4_0(const void * vx, const int64_t ib, const int iqs, float2 & v) {
+    const block_iso4_0 * x = (const block_iso4_0 *) vx;
+    const float norm  = __half2float(x[ib].norm);
+    const float scale = norm / 7.5f;
+    const int j0 = iqs;
+    const int j1 = iqs + 1;
+
+    const int q0 = (j0 % 2 == 0) ? (x[ib].qs[j0 / 2] & 0xF) : ((x[ib].qs[j0 / 2] >> 4) & 0xF);
+    const int q1 = (j1 % 2 == 0) ? (x[ib].qs[j1 / 2] & 0xF) : ((x[ib].qs[j1 / 2] >> 4) & 0xF);
+
+    v.x = ((float)q0 - 7.5f) * scale;
+    v.y = ((float)q1 - 7.5f) * scale;
+}
