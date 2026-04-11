@@ -25,7 +25,8 @@ const std::vector<enum common_speculative_type> common_speculative_types = {
     COMMON_SPECULATIVE_TYPE_NGRAM_MAP_K,
     COMMON_SPECULATIVE_TYPE_NGRAM_MAP_K4V,
     COMMON_SPECULATIVE_TYPE_NGRAM_MOD,
-    COMMON_SPECULATIVE_TYPE_NGRAM_CACHE
+    COMMON_SPECULATIVE_TYPE_NGRAM_CACHE,
+    COMMON_SPECULATIVE_TYPE_PHANTOM
 };
 
 const std::map<std::string, enum common_speculative_type> common_speculative_type_from_name_map = {
@@ -36,7 +37,8 @@ const std::map<std::string, enum common_speculative_type> common_speculative_typ
     {"ngram_map_k",   COMMON_SPECULATIVE_TYPE_NGRAM_MAP_K},
     {"ngram_map_k4v", COMMON_SPECULATIVE_TYPE_NGRAM_MAP_K4V},
     {"ngram_mod",     COMMON_SPECULATIVE_TYPE_NGRAM_MOD},
-    {"ngram_cache",   COMMON_SPECULATIVE_TYPE_NGRAM_CACHE}
+    {"ngram_cache",   COMMON_SPECULATIVE_TYPE_NGRAM_CACHE},
+    {"phantom",       COMMON_SPECULATIVE_TYPE_PHANTOM}
 };
 
 struct common_speculative_config {
@@ -948,6 +950,8 @@ struct common_speculative_state_ngram_cache : public common_speculative_state {
     }
 };
 
+#include "phantom.h"
+
 struct common_speculative {
     std::vector<std::unique_ptr<common_speculative_state>> impls; // list of implementations to use and their states
     common_speculative_state * curr_impl = nullptr; // current implementation in use (for stats)
@@ -997,6 +1001,7 @@ std::string common_speculative_type_to_str(enum common_speculative_type type) {
         case COMMON_SPECULATIVE_TYPE_NGRAM_MAP_K4V: return "ngram_map_k4v";
         case COMMON_SPECULATIVE_TYPE_NGRAM_MOD:     return "ngram_mod";
         case COMMON_SPECULATIVE_TYPE_NGRAM_CACHE:   return "ngram_cache";
+        case COMMON_SPECULATIVE_TYPE_PHANTOM:       return "phantom";
         default:                                    return "unknown";
     }
 }
@@ -1081,6 +1086,7 @@ common_speculative * common_speculative_init(
         bool has_ngram_map_k   = (params.type == COMMON_SPECULATIVE_TYPE_NGRAM_MAP_K);
         bool has_ngram_map_k4v = (params.type == COMMON_SPECULATIVE_TYPE_NGRAM_MAP_K4V);
         bool has_ngram_mod     = (params.type == COMMON_SPECULATIVE_TYPE_NGRAM_MOD);
+        bool has_phantom       = (params.type == COMMON_SPECULATIVE_TYPE_PHANTOM);
 
         // In a more complex implementation we could use the same implementation but with different parameters.
         // This was initially used in PR-18471 but removed to simplify the code.
@@ -1113,6 +1119,18 @@ common_speculative * common_speculative_init(
         }
         if (has_ngram_cache) {
             configs.push_back(common_speculative_config(COMMON_SPECULATIVE_TYPE_NGRAM_CACHE, params));
+        }
+        if (has_phantom) {
+            // Phantom uses ngram_mod internally — ensure shared instance exists
+            if (!params.ngram_mod) {
+                params.ngram_mod = std::make_shared<common_ngram_mod>(params.ngram_size_n, 4*1024*1024);
+
+                LOG_INF("%s: initialized ngram_mod for phantom with n=%d, size=%zu (%.3f MB)\n", __func__,
+                        params.ngram_size_n, params.ngram_mod->size(),
+                        (float)(params.ngram_mod->size_bytes())/1024/1024);
+            }
+
+            configs.push_back(common_speculative_config(COMMON_SPECULATIVE_TYPE_PHANTOM, params));
         }
         if (has_draft_eagle3) {
             // EAGLE3: full speculative with target hidden state extraction + FC encode + decode
@@ -1179,6 +1197,17 @@ common_speculative * common_speculative_init(
                 auto state = create_state_ngram_cache(
                         params.lookup_cache_static, params.lookup_cache_dynamic, config);
                 impls.push_back(std::make_unique<common_speculative_state_ngram_cache>(state));
+                break;
+            }
+            case COMMON_SPECULATIVE_TYPE_PHANTOM: {
+                GGML_ASSERT(config.params.ngram_mod);
+                impls.push_back(std::make_unique<common_speculative_state_phantom>(
+                    config.type,
+                    *config.params.ngram_mod,
+                    config.params.phantom_bloom_bits,
+                    config.params.phantom_buffers,
+                    config.params.n_max
+                ));
                 break;
             }
             default:
