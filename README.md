@@ -6,67 +6,118 @@
 ---
 </div>
 
-## A fork of [llama.cpp](https://github.com/ggml-org/llama.cpp) optimized for 1-bit quantized model inference with TurboQuant compression and EAGLE speculative decoding on AMD ROCm GPUs.
+## llama.cpp 1-Bit Turbo EAGLE — AMD ROCm Inference with 1-Bit Models, RotorQuant KV, and EAGLE3 Speculative Decoding
 
+A fork of [llama.cpp](https://github.com/ggml-org/llama.cpp) that brings high-performance inference to AMD consumer GPUs (RX 6000/7000 series) with 1-bit GGUF model support, RotorQuant KV cache compression, EAGLE3 speculative decoding, and PHANTOM-X ghost-draft speculation.
 
-### 📦 PrismML 1-Bit Quantization (Q1_0_G128)
+---
 
-- Native Q1_0_G128 ternary quantization support (-1, 0, +1) with 128-element groups
+## Core Features
+
+### 📦 PrismML 1-Bit GGUF Model Support (Q1_0_G128)
+Native Q1_0_G128 ternary quantization (-1, 0, +1) with 128-element groups:
 - HIP/CUDA/Metal GPU dequantization and dot-product kernels
 - CPU fallback dequant and quantize-fns
 - Enables GPU inference of [PrismML Bonsai](https://huggingface.co/PrismML) 1-bit GGUF models
-- **Benchmarks (AMD RX 6700 XT):** Bonsai-1.7B 2152 pp / 209 tg · Bonsai-4B 867 pp / 122 tg · Bonsai-8B 454 pp / 92 tg
+- GGUF type 41 remapped to `GGML_TYPE_Q1_0_g128` for PrismML compatibility
+
+**Benchmarks (AMD RX 6700 XT, 12GB VRAM):**
+
+| Model | Prompt (t/s) | Generation (t/s) | VRAM |
+|-------|-------------|-------------------|------|
+| Bonsai-1.7B | 2152 | 209 | ~0.5 GB |
+| Bonsai-4B | 867 | 122 | ~1.1 GB |
+| Bonsai-8B | 454 | 92 | ~2.2 GB |
+
+### 🌀 RotorQuant KV Cache Compression
+Geometric-rotation-based KV cache quantization ported from the [RotorQuant paper](https://github.com/scrya-com/rotorquant) by [Scrya](https://github.com/scrya-com) (ICLR 2026). Registered as native GGML types with CPU, CUDA/HIP, and Flash Attention support:
+
+| GGML Type | Method | Bits | Rotation |
+|-----------|--------|------|----------|
+| `GGML_TYPE_PLANAR3_0` (44) | PlanarQuant | 3-bit | 2D Givens |
+| `GGML_TYPE_PLANAR4_0` (45) | PlanarQuant | 4-bit | 2D Givens |
+| `GGML_TYPE_ISO3_0` (46) | IsoQuant | 3-bit | Hadamard/Isometric |
+| `GGML_TYPE_ISO4_0` (47) | IsoQuant | 4-bit | Hadamard/Isometric |
+
+- CPU quantize/dequantize, CUDA/HIP dispatch, Flash Attention V-dequant path
+- Data-oblivious (no calibration needed)
 
 ### 🦅 EAGLE3 Speculative Decoding
-
-- Full EAGLE3 pipeline: hidden state extraction → FC encoder → 1-layer transformer decoder → autoregressive draft loop
+Full integration of [EAGLE3](https://github.com/SafeAILab/EAGLE) (Lossless Acceleration of LLM Decoding by Feature Extrapolation) by [Yuhui Li et al. / SafeAILab](https://github.com/SafeAILab/EAGLE):
+- Hidden state extraction → FC encoder → 1-layer transformer decoder → autoregressive draft loop
 - GGUF converter for EAGLE3 safetensors (`convert_hf_to_gguf.py`)
 - Automatic weight tying (lm_head → token_embd) for EAGLE3 models
 - `spec_harness` reusable validation tool for any speculative draft model
 - Works with `llama-speculative-simple` — just pass `-md <eagle3.gguf>` alongside your target model
 
-### 🧊 TurboQuant KV Cache Compression (TQ3_0)
+---
 
-- Custom TQ3_0 3-bit KV cache quantization type using Walsh-Hadamard Transform (WHT) rotation + codebook compression
-- Dramatically reduces VRAM for KV cache, enabling larger contexts on memory-constrained GPUs
+## AMD ROCm Exclusive Features
 
-### 🔧 ROCm Hardening for RDNA2
+### 👻 PHANTOM-X — Zero-Copy Ghost-Draft N-Gram Speculation
+Single-file C++ implementation (`common/phantom.h`, 525 lines) of our novel speculative decoding algorithm:
+- Bloom filter negative bigram learning with FNV-1a hash and aging
+- N-gram corpus for context-aware draft generation
+- Pinned memory ring buffer for zero-copy CPU→GPU DMA
+- Adaptive ghost-pool scaling (1–8 workers)
+- Integrated into `common/speculative.cpp`
 
+### 🔧 Wave32 RDNA2 Kernel Optimizations
+Custom 128-thread Wave32 paths for RDNA2 architecture:
+- **RMSNorm** — Wave32-optimized reduction
+- **RoPE** — Rotary position embedding for RDNA2 wavefront size
+
+### 🔗 gfx1031 Compatibility
+Full compatibility layer for gfx1031 (RX 6700 XT) via gfx1030 normalization:
+- `HSA_OVERRIDE_GFX_VERSION=10.3.0` environment variable
+- `GPU_TARGETS=gfx1030` build targeting
 - Null context guard for model loading failures (fail-fast on OOM)
-- Tested on AMD RX 6700 XT (gfx1030, 12GB VRAM)
 
-### 🎵 LFM2.5-Audio-1.5B Pipeline (WIP)
+---
 
-- Liquid Foundation Model 2.5 audio integration
-
-### Branches
+## Branches
 
 | Branch | What |
 |--------|------|
-| `master` | Main branch — Q1_0_G128 GPU kernels + EAGLE3 speculative decoding + TQ3_0 KV + ROCm hardening |
-| `audio/lfm2.5-bringup` | LFM2.5 audio pipeline (4185 insertions, 27 files) |
+| `master` | Main — Q1_0_G128 + EAGLE3 + RotorQuant KV + PHANTOM-X + Wave32 RDNA2 |
+| `audio/lfm2.5-bringup` | LFM2.5-Audio pipeline (experimental) |
 
-### Quick Start (ROCm)
+---
 
+## Quick Start (ROCm)
+
+### Prerequisites
+- AMD GPU with ROCm support (tested on RX 6700 XT / gfx1031)
+- ROCm 6.x
+- CMake 3.14+
+
+### Build
 ```bash
 git clone https://github.com/carlosfundora/llama.cpp-1-bit-turbo.git
 cd llama.cpp-1-bit-turbo
 
-# Build with ROCm HIP support
-cmake -B build -DGGML_HIP=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release -j$(nproc)
+export HSA_OVERRIDE_GFX_VERSION=10.3.0    # Required for gfx1031 → gfx1030
+export GPU_TARGETS=gfx1030
 
-# Serve a PrismML 1-bit model
+cmake -B build -DGGML_HIP=ON -DGPU_TARGETS=gfx1030 -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+### Serve a 1-Bit Model
+```bash
 ./build/bin/llama-server \
   -m /path/to/Bonsai-1.7B-Q1_0.gguf \
   --host 0.0.0.0 --port 8080
 ```
 
-### Environment Variables (ROCm)
-
+### EAGLE3 Speculative Decoding
 ```bash
-export HSA_OVERRIDE_GFX_VERSION=10.3.0    # Required for gfx1030
-export PYTORCH_ROCM_ARCH=gfx1030
+./build/bin/llama-speculative-simple \
+  -m /path/to/Bonsai-4B.gguf \
+  -md /path/to/Bonsai-4B-EAGLE3-f16.gguf \
+  -ngl 99 -ngld 99 \
+  -p "The capital of France is" \
+  -n 128
 ```
 
 ---
