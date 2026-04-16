@@ -317,6 +317,9 @@ struct common_speculative_state_phantom : public common_speculative_state {
 
     // ----------------------------------------------------------------
     // draft() — generate draft with all 5 phantom components
+    //
+    // Uses rolling hash for O(1) per-step n-gram lookup and fused
+    // bloom checking (no second scan pass).
     // ----------------------------------------------------------------
     void draft(
             const common_params_speculative & params,
@@ -365,15 +368,36 @@ struct common_speculative_state_phantom : public common_speculative_state {
         }
         ctx[n - 1] = id_last;
 
-        // Generate draft tokens from ngram_mod
+        // Fused draft generation with rolling hash + inline bloom check.
+        // First window: ctx[0..n-1] — full hash
+        uint64_t h = mod.hash_full(ctx.data());
+        llama_token prev_tok = id_last;
         int drafted = 0;
+
         for (int i = 0; i < n_draft; ++i) {
-            const llama_token tok = mod.get(ctx.data() + i);
+            const llama_token tok = mod.get_by_hash(h);
             if (tok == common_ngram_mod::EMPTY) {
                 break;
             }
+
+            // Component 4: Fused bloom check — test bigram before accepting
+            if (bloom.query(prev_tok, tok)) {
+                n_bloom_filtered++;
+                if (verbose) {
+                    LOG_INF("%s: bloom blocked (%d→%d) at pos %d\n",
+                            __func__, prev_tok, tok, i);
+                }
+                break;
+            }
+
             ctx[n + i] = tok;
+            prev_tok = tok;
             drafted++;
+
+            // Rolling hash for next window (if we'll continue)
+            if (i + 1 < n_draft) {
+                h = mod.hash_roll(h, ctx[i], tok);
+            }
         }
 
         if (drafted == 0 || drafted < params.n_min) {
@@ -382,46 +406,14 @@ struct common_speculative_state_phantom : public common_speculative_state {
             return;
         }
 
-        // Extract raw draft (without ngram prefix)
-        llama_tokens raw(ctx.begin() + (ptrdiff_t)n, ctx.begin() + (ptrdiff_t)(n + drafted));
-
-        // Component 4: Scan+patch — check first transition against bloom
-        if (bloom.query(id_last, raw[0])) {
-            n_bloom_filtered++;
-            if (verbose) {
-                LOG_INF("%s: bloom blocked (%d→%d)\n", __func__, id_last, raw[0]);
-            }
-            result.clear();
-            clear_pending();
-            return;
-        }
-
-        // Scan internal bigrams, truncate at first bloom hit
-        for (size_t i = 1; i < raw.size(); ++i) {
-            if (bloom.query(raw[i - 1], raw[i])) {
-                n_bloom_filtered++;
-                raw.resize(i);
-                if (verbose) {
-                    LOG_INF("%s: bloom truncated at pos %zu\n", __func__, i);
-                }
-                break;
-            }
-        }
-
-        // After filtering, if too short return empty for framework fallback
-        if ((int)raw.size() < params.n_min) {
-            result.clear();
-            clear_pending();
-            return;
-        }
+        // Extract drafted tokens
+        result.assign(ctx.begin() + (ptrdiff_t)n, ctx.begin() + (ptrdiff_t)(n + drafted));
 
         // Component 5: Write to ghost buffer (pinned memory)
         if (!ghost_buf.slots.empty()) {
-            ghost_buf.write(raw.data(), raw.size());
+            ghost_buf.write(result.data(), result.size());
             ghost_buf.advance();
         }
-
-        result = std::move(raw);
 
         // Save for accept() correlation
         last_draft     = result;

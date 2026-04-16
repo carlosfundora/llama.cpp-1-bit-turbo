@@ -127,9 +127,9 @@ int main(void) {
     assert(params.n_predict == 6789);
     assert(params.n_batch == 9090);
 
-    argv = {"binary_name", "-ctk", "tq3_0", "-ctv", "f16"};
+    argv = {"binary_name", "-ctk", "tq2_0", "-ctv", "f16"};
     assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_COMMON));
-    assert(params.cache_type_k == GGML_TYPE_TQ3_0);
+    assert(params.cache_type_k == GGML_TYPE_TQ2_0);
     assert(params.cache_type_v == GGML_TYPE_F16);
 
     // --draft cannot be used outside llama-speculative
@@ -137,9 +137,9 @@ int main(void) {
     assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_SPECULATIVE));
     assert(params.speculative.n_max == 123);
 
-    argv = {"binary_name", "-ctkd", "tq3_0", "-ctvd", "q4_0"};
+    argv = {"binary_name", "-ctkd", "tq2_0", "-ctvd", "q4_0"};
     assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_SPECULATIVE));
-    assert(params.speculative.cache_type_k == GGML_TYPE_TQ3_0);
+    assert(params.speculative.cache_type_k == GGML_TYPE_TQ2_0);
     assert(params.speculative.cache_type_v == GGML_TYPE_Q4_0);
 
     // multi-value args (CSV)
