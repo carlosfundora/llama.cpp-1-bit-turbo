@@ -222,6 +222,10 @@ int main(int argc, char ** argv) {
 
         LOG_DBG("accepted %d/%d draft tokens, the last target token is: (%d)\n", (int) ids.size() - 1, (int) draft.size(), id_last);
 
+        // inform speculative state about accepted tokens so implementations
+        // with stateful feedback (e.g. PHANTOM bloom/gamma) update correctly
+        common_speculative_accept(spec, ids.size() - 1);
+
         {
             LOG_DBG("clear kv cache from any extra tokens, n_past = %d\n", n_past);
 
