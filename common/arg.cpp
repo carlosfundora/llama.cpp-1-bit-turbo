@@ -394,6 +394,14 @@ const std::vector<ggml_type> kv_cache_types = {
 };
 
 static ggml_type kv_cache_type_from_str(const std::string & s) {
+    // RotorQuant shorthand aliases (cross-engine compatible with SGLang)
+    if (s == "rq3")        return GGML_TYPE_PLANAR3_0;
+    if (s == "rq4")        return GGML_TYPE_PLANAR4_0;
+    if (s == "rq3_planar") return GGML_TYPE_PLANAR3_0;
+    if (s == "rq4_planar") return GGML_TYPE_PLANAR4_0;
+    if (s == "rq3_iso")    return GGML_TYPE_ISO3_0;
+    if (s == "rq4_iso")    return GGML_TYPE_ISO4_0;
+
     for (const auto & type : kv_cache_types) {
         if (ggml_type_name(type) == s) {
             return type;

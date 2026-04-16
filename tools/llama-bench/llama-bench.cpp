@@ -495,6 +495,25 @@ static ggml_type ggml_type_from_name(const std::string & s) {
     if (s == "iso4") {
         return GGML_TYPE_ISO4_0;
     }
+    // RotorQuant shorthand aliases (cross-engine compatible with SGLang)
+    if (s == "rq3") {
+        return GGML_TYPE_PLANAR3_0;
+    }
+    if (s == "rq4") {
+        return GGML_TYPE_PLANAR4_0;
+    }
+    if (s == "rq3_planar") {
+        return GGML_TYPE_PLANAR3_0;
+    }
+    if (s == "rq4_planar") {
+        return GGML_TYPE_PLANAR4_0;
+    }
+    if (s == "rq3_iso") {
+        return GGML_TYPE_ISO3_0;
+    }
+    if (s == "rq4_iso") {
+        return GGML_TYPE_ISO4_0;
+    }
 
     return GGML_TYPE_COUNT;
 }
