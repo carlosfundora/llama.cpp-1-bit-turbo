@@ -459,7 +459,7 @@ class LlamaBenchDataJSONL(LlamaBenchDataSQLite3):
         db_fields = LLAMA_BENCH_DB_FIELDS if tool == "llama-bench" else TEST_BACKEND_OPS_DB_FIELDS
 
         with open(data_file, "r", encoding="utf-8") as fp:
-            current_keys, sql, rows = None, None, []
+            current_keys, sql, rows = None, "", []
             for i, line in enumerate(fp):
                 parsed = json.loads(line)
 
@@ -512,7 +512,7 @@ class LlamaBenchDataJSON(LlamaBenchDataSQLite3):
             with open(data_file, "r", encoding="utf-8") as fp:
                 parsed = json.load(fp)
 
-                current_keys, sql, rows = None, None, []
+                current_keys, sql, rows = None, "", []
                 for i, entry in enumerate(parsed):
                     for k in entry.keys() - set(db_fields):
                         del entry[k]
@@ -563,7 +563,7 @@ class LlamaBenchDataCSV(LlamaBenchDataSQLite3):
 
         for data_file in data_files:
             with open(data_file, "r", encoding="utf-8") as fp:
-                current_keys, sql, rows = None, None, []
+                current_keys, sql, rows = None, "", []
                 for i, parsed in enumerate(csv.DictReader(fp)):
                     keys = set(parsed.keys())
 
@@ -976,8 +976,8 @@ else:
 if known_args.plot:
     def create_performance_plot(table_data: list[list[str]], headers: list[str], baseline_name: str, compare_name: str, output_file: str, plot_x_param: str, log_scale: bool = False, tool_type: str = "llama-bench", metric_name: str = "t/s"):
         try:
-            import matplotlib
-            import matplotlib.pyplot as plt
+            import matplotlib  # type: ignore
+            import matplotlib.pyplot as plt  # type: ignore
             matplotlib.use('Agg')
         except ImportError as e:
             logger.error("matplotlib is required for --plot.")
