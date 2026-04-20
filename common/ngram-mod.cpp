@@ -134,7 +134,17 @@ int common_ngram_mod::draft_rolling(const entry_t * ctx, int max_draft, entry_t 
         if (i + 1 < max_draft) {
             // Speculative prefetch: assume out[i] will be valid, pre-hash next
             const size_t next_idx = mask ? (h & mask) : (h % entries.size());
+            #if defined(__GNUC__) || defined(__clang__)
             __builtin_prefetch(&entries[next_idx], 0, 1);
+#elif defined(_MSC_VER)
+#if defined(_M_X64) || defined(_M_IX86)
+            #include <mmintrin.h>
+            _mm_prefetch((const char*)&entries[next_idx], _MM_HINT_T0);
+#elif defined(_M_ARM64)
+            #include <arm64intr.h>
+            __prefetch((const void*)&entries[next_idx]);
+#endif
+#endif
         }
 
         tok = get_by_hash(h);

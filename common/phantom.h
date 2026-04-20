@@ -24,6 +24,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 
 #if defined(__linux__)
 #include <sys/mman.h>
@@ -99,7 +102,11 @@ struct phantom_bloom {
     float occupancy() const {
         size_t set = 0;
         for (auto w : bits) {
+            #if defined(__GNUC__) || defined(__clang__)
             set += __builtin_popcountll(w);
+#elif defined(_MSC_VER)
+            set += __popcnt64(w);
+#endif
         }
         return (float)set / (float)n_bits;
     }
