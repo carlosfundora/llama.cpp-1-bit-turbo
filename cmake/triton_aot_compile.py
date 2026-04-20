@@ -20,11 +20,11 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-# type: ignore
-import triton  # type: ignore
-# type: ignore
-import triton  # type: ignore.language as tl # type: ignore
-from triton.compiler.compiler import compile as tc_compile, ASTSource  # type: ignore # type: ignore
+
+import triton # type: ignore  # type: ignore
+
+import triton # type: ignore  # type: ignore
+from triton.compiler.compiler import compile as tc_compile, ASTSource # type: ignore  # type: ignore
 
 # ---------------------------------------------------------------------------
 # Standalone Triton kernel definitions (extracted from sglang RotorQuant engine)
@@ -524,7 +524,7 @@ def compile_all(output_dir: str, target_name: str, arch: str) -> None:
     asm_key = "hsaco" if target_name == "hip" else "cubin"
 
     target = get_target(target_name, arch)
-    logging.info(f"Target: {target}")
+    print(f"Target: {target}")  # noqa: NP100
 
     errors = []
     for fn, sig, consts, suffix in KERNELS:
@@ -532,7 +532,7 @@ def compile_all(output_dir: str, target_name: str, arch: str) -> None:
         out_name = f"{name}_{suffix}.{ext}"
         out_path = os.path.join(output_dir, out_name)
 
-        logging.info(f"  Compiling {name} ({suffix}) ...", end=" ", flush=True)
+        print(f"  Compiling {name} ({suffix}) ...", end=" ", flush=True)  # noqa: NP100
         try:
             src = ASTSource(fn, signature=sig, constexprs=consts)
             compiled = tc_compile(src, target=target)
@@ -542,18 +542,18 @@ def compile_all(output_dir: str, target_name: str, arch: str) -> None:
                 binary = binary.encode()
             with open(out_path, "wb") as f:
                 f.write(binary)
-            logging.info(f"ok → {out_name} ({len(binary)} bytes)")
+            print(f"ok → {out_name} ({len(binary)} bytes)")  # noqa: NP100
         except Exception as exc:
-            logging.info(f"FAILED: {exc}")
+            print(f"FAILED: {exc}")  # noqa: NP100
             errors.append((name, exc))
 
     if errors:
-        logging.info(f"\n{len(errors)} kernel(s) failed to compile:", file=sys.stderr)
+        print(f"\n{len(errors)} kernel(s) failed to compile:", file=sys.stderr)  # noqa: NP100
         for name, exc in errors:
-            logging.info(f"  {name}: {exc}", file=sys.stderr)
+            print(f"  {name}: {exc}", file=sys.stderr)  # noqa: NP100
         sys.exit(1)
     else:
-        logging.info(f"\nAll kernels compiled to {output_dir}/")
+        print(f"\nAll kernels compiled to {output_dir}/")  # noqa: NP100
 
 
 def main():
@@ -580,11 +580,11 @@ def main():
     if args.arch is None:
         args.arch = "gfx1031" if args.target == "hip" else "sm_80"
 
-    logging.info(f"RotorQuant Triton AOT compiler")
-    logging.info(f"  target : {args.target}")
-    logging.info(f"  arch   : {args.arch}")
-    logging.info(f"  output : {args.output_dir}")
-    logging.info()
+    print("RotorQuant Triton AOT compiler")  # noqa: NP100
+    print(f"  target : {args.target}")  # noqa: NP100
+    print(f"  arch   : {args.arch}")  # noqa: NP100
+    print(f"  output : {args.output_dir}")  # noqa: NP100
+    print()  # noqa: NP100
 
     compile_all(args.output_dir, args.target, args.arch)
 

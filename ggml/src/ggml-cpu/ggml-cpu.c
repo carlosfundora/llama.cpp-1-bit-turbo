@@ -759,8 +759,8 @@ struct ggml_tensor * ggml_new_f32(struct ggml_context * ctx, float value) {
 }
 
 struct ggml_tensor * ggml_set_i32 (struct ggml_tensor * tensor, int32_t value) {
-    const int n     = ggml_nrows(tensor);
-    const int nc    = tensor->ne[0];
+    const int n = (int)ggml_nrows(tensor);
+    const int nc = (int)tensor->ne[0];
     const size_t n1 = tensor->nb[1];
 
     char * const data = tensor->data;
@@ -818,8 +818,8 @@ struct ggml_tensor * ggml_set_i32 (struct ggml_tensor * tensor, int32_t value) {
 }
 
 struct ggml_tensor * ggml_set_f32(struct ggml_tensor * tensor, float value) {
-    const int n     = ggml_nrows(tensor);
-    const int nc    = tensor->ne[0];
+    const int n = (int)ggml_nrows(tensor);
+    const int nc = (int)tensor->ne[0];
     const size_t n1 = tensor->nb[1];
 
     char * const data = tensor->data;
@@ -880,7 +880,7 @@ int32_t ggml_get_i32_1d(const struct ggml_tensor * tensor, int i) {
     if (!ggml_is_contiguous(tensor)) {
         int64_t id[4] = { 0, 0, 0, 0 };
         ggml_unravel_index(tensor, i, &id[0], &id[1], &id[2], &id[3]);
-        return ggml_get_i32_nd(tensor, id[0], id[1], id[2], id[3]);
+        return ggml_get_i32_nd(tensor, (int)id[0], (int)id[1], (int)id[2], (int)id[3]);
     }
     switch (tensor->type) {
         case GGML_TYPE_I8:
@@ -924,7 +924,7 @@ void ggml_set_i32_1d(const struct ggml_tensor * tensor, int i, int32_t value) {
     if (!ggml_is_contiguous(tensor)) {
         int64_t id[4] = { 0, 0, 0, 0 };
         ggml_unravel_index(tensor, i, &id[0], &id[1], &id[2], &id[3]);
-        ggml_set_i32_nd(tensor, id[0], id[1], id[2], id[3], value);
+        ggml_set_i32_nd(tensor, (int)id[0], (int)id[1], (int)id[2], (int)id[3], value);
         return;
     }
     switch (tensor->type) {
@@ -1023,7 +1023,7 @@ float ggml_get_f32_1d(const struct ggml_tensor * tensor, int i) {
     if (!ggml_is_contiguous(tensor)) {
         int64_t id[4] = { 0, 0, 0, 0 };
         ggml_unravel_index(tensor, i, &id[0], &id[1], &id[2], &id[3]);
-        return ggml_get_f32_nd(tensor, id[0], id[1], id[2], id[3]);
+        return ggml_get_f32_nd(tensor, (int)id[0], (int)id[1], (int)id[2], (int)id[3]);
     }
     switch (tensor->type) {
         case GGML_TYPE_I8:
@@ -1061,7 +1061,7 @@ void ggml_set_f32_1d(const struct ggml_tensor * tensor, int i, float value) {
     if (!ggml_is_contiguous(tensor)) {
         int64_t id[4] = { 0, 0, 0, 0 };
         ggml_unravel_index(tensor, i, &id[0], &id[1], &id[2], &id[3]);
-        ggml_set_f32_nd(tensor, id[0], id[1], id[2], id[3], value);
+        ggml_set_f32_nd(tensor, (int)id[0], (int)id[1], (int)id[2], (int)id[3], value);
         return;
     }
     switch (tensor->type) {
@@ -1233,7 +1233,7 @@ static void ggml_compute_forward_mul_mat_one_chunk(
                 //}
 
                 for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ir0 += num_rows_per_vec_dot) {
-                    vec_dot(ne00, &tmp[ir0 - iir0], (num_rows_per_vec_dot > 1 ? 16 : 0), src0_row + ir0 * nb01, (num_rows_per_vec_dot > 1 ? nb01 : 0), src1_col, (num_rows_per_vec_dot > 1 ? src1_col_stride : 0), num_rows_per_vec_dot);
+                    vec_dot((int)ne00, &tmp[ir0 - iir0], (num_rows_per_vec_dot > 1 ? 16 : 0), src0_row + ir0 * nb01, (num_rows_per_vec_dot > 1 ? nb01 : 0), src1_col, (num_rows_per_vec_dot > 1 ? src1_col_stride : 0), num_rows_per_vec_dot);
                 }
 
                 for (int cn = 0; cn < num_rows_per_vec_dot; ++cn) {
@@ -1501,7 +1501,7 @@ static void ggml_compute_forward_mul_mat_id_one_chunk(
                 float * dst_col = (float *) ((char *) dst->data + (i1*nb1 + i2*nb2));
 
                 for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir0_end; ++ir0) {
-                    vec_dot(ne00, &tmp[ir0 - iir0], 0, src0_cur + ir0*nb01, 0, src1_col, 0, 1);
+                    vec_dot((int)ne00, &tmp[ir0 - iir0], 0, src0_cur + ir0*nb01, 0, src1_col, 0, 1);
                 }
 
                 memcpy(&dst_col[iir0], tmp, (MIN(iir0 + blck_0, ir0_end) - iir0)*sizeof(float));
@@ -1617,7 +1617,7 @@ static void ggml_compute_forward_mul_mat_id(
 
                 assert(i02 >= 0 && i02 < n_as);
 
-                MMID_MATRIX_ROW(i02, matrix_row_counts[i02]) = (struct mmid_row_mapping) {id, iid1};
+                MMID_MATRIX_ROW(i02, matrix_row_counts[i02]) = (struct mmid_row_mapping) {(int32_t)id, iid1};
                 matrix_row_counts[i02] += 1;
             }
         }
@@ -2331,7 +2331,7 @@ static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads) {
             } break;
         case GGML_OP_SOFT_MAX:
             {
-                n_tasks = MIN(n_threads, ggml_nrows(node->src[0]));
+                n_tasks = (int)MIN((int64_t)n_threads, ggml_nrows(node->src[0]));
             } break;
         case GGML_OP_IM2COL:
         case GGML_OP_IM2COL_BACK:
@@ -2370,7 +2370,7 @@ static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads) {
         case GGML_OP_RWKV_WKV7:
             {
                 const int64_t n_heads = node->src[1]->ne[1];
-                n_tasks = MIN(n_threads, n_heads);
+                n_tasks = (int)MIN((int64_t)n_threads, (int64_t)n_heads);
             } break;
         case GGML_OP_WIN_PART:
         case GGML_OP_WIN_UNPART:
@@ -2918,7 +2918,7 @@ struct ggml_cplan ggml_graph_plan(
                 case GGML_OP_FLASH_ATTN_BACK:
                     {
                         const int64_t    D = node->src[0]->ne[0];
-                        const int64_t ne11 = ggml_up(node->src[1]->ne[1], GGML_SOFT_MAX_UNROLL);
+                        const int ne11 = (int)ggml_up(node->src[1]->ne[1], GGML_SOFT_MAX_UNROLL);
                         const int64_t mxDn = MAX(D, ne11) * 2; // *2 because of S and SM in ggml_compute_forward_flash_attn_back
                         if (node->src[1]->type == GGML_TYPE_F32) {
                             cur  = sizeof(float)*mxDn*n_tasks; // TODO: this can become (n_tasks-1)
