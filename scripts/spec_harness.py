@@ -81,7 +81,7 @@ def feature_stats(header, records):
 
     logging.info(f"=== Feature Statistics ({len(records)} records) ===")
     logging.info(f"n_embd={n_embd}, n_layers={n_layers}, layers={layer_ids[:n_layers]}")
-    logging.info()
+    logging.info("")
 
     all_feats = np.stack([r['features'] for r in records])  # [N, n_layers*n_embd]
 
@@ -91,7 +91,7 @@ def feature_stats(header, records):
         logging.info(f"  mean={layer_feats.mean():.4f}  std={layer_feats.std():.4f}")
         logging.info(f"  min={layer_feats.min():.4f}   max={layer_feats.max():.4f}")
         logging.info(f"  per-token norms: mean={np.linalg.norm(layer_feats, axis=1).mean():.2f}")
-        logging.info()
+        logging.info("")
 
     # Combined features
     logging.info(f"Combined ({n_layers}×{n_embd} = {n_layers*n_embd}):")
@@ -218,11 +218,12 @@ def validate(header, records, eagle3_path, with_kv_history=False):
     tensors = st.load_file(str(eagle3_path / 'model.safetensors'))
 
     n_embd = header['n_embd']
+    fc_weight = tensors["fc.weight"].float()  # type: ignore
 
-    logging.info(f"FC weight shape: {fc_weight.shape}")
+    logging.info("Using embed_tokens as lm_head (lm_head is untrained)")
     logging.info(f"Using embed_tokens as lm_head (lm_head is untrained)")
     logging.info(f"KV history: {'ENABLED' if with_kv_history else 'DISABLED (single-token, matches C++)'}")
-    logging.info()
+    logging.info("")
 
     top1_correct = 0
     top5_correct = 0
@@ -277,26 +278,26 @@ def validate(header, records, eagle3_path, with_kv_history=False):
               f"pred={predicted:6d} truth={next_token_id:6d} | "
               f"spread={spread:7.1f} conf={top_prob:.3f}")
 
-    logging.info()
+    logging.info("")
     logging.info("=" * 70)
-    logging.info(f"=== Speculative Harness Report ===")
+    logging.info("=== Speculative Harness Report ===")
     logging.info("=" * 70)
     logging.info(f"EAGLE3 model:  {eagle3_path}")
     logging.info(f"Records:       {total}")
     logging.info(f"KV history:    {'Yes' if with_kv_history else 'No (single-token)'}")
-    logging.info()
-    logging.info(f"Draft Accuracy:")
+    logging.info("")
+    logging.info("Draft Accuracy:")
     logging.info(f"  Top-1:  {top1_correct/total:6.1%} ({top1_correct}/{total})")
     logging.info(f"  Top-5:  {top5_correct/total:6.1%} ({top5_correct}/{total})")
     logging.info(f"  Top-10: {top10_correct/total:6.1%} ({top10_correct}/{total})")
-    logging.info()
-    logging.info(f"Logit Diagnostics:")
+    logging.info("")
+    logging.info("Logit Diagnostics:")
     logging.info(f"  Mean spread:     {np.mean(spreads):8.1f}")
     logging.info(f"  Min spread:      {np.min(spreads):8.1f}")
     logging.info(f"  Max spread:      {np.max(spreads):8.1f}")
     logging.info(f"  Mean confidence: {np.mean(confidences):8.4f}")
     logging.info(f"  Max confidence:  {np.max(confidences):8.4f}")
-    logging.info()
+    logging.info("")
 
     # Verdict
     top5_pct = top5_correct / total
@@ -321,7 +322,7 @@ def validate(header, records, eagle3_path, with_kv_history=False):
 
     logging.info(f"Verdict: {verdict}")
     logging.info(f"  {explanation}")
-    logging.info()
+    logging.info("")
 
     return verdict
 
