@@ -6,6 +6,7 @@ import struct
 from gguf.gguf_reader import GGUFReader
 from gguf.constants import GGUFValueType, GGUF_MAGIC
 
+
 class TestGGUFReaderArray(unittest.TestCase):
     def setUp(self):
         self.fd, self.path = tempfile.mkstemp()
@@ -91,6 +92,7 @@ class TestGGUFReaderArray(unittest.TestCase):
         assert field is not None
         contents = field.contents()
         self.assertEqual(contents, [['hello', 'world'], ['!']])
+
 
 if __name__ == '__main__':
     unittest.main()
