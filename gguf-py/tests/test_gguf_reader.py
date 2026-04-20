@@ -53,10 +53,13 @@ class TestGGUFReaderArray(unittest.TestCase):
         field = reader.get_field('test.array')
         self.assertIsNotNone(field)
 
+        assert field is not None
         contents = field.contents()
         self.assertEqual(contents, [[10, 20], [30, 40, 50]])
 
+        assert field is not None
         self.assertEqual(field.contents(0), [10, 20])
+        assert field is not None
         self.assertEqual(field.contents(1), [30, 40, 50])
 
     def test_multi_dimensional_array_strings(self):
@@ -85,6 +88,7 @@ class TestGGUFReaderArray(unittest.TestCase):
         field = reader.get_field('test.string.array')
         self.assertIsNotNone(field)
 
+        assert field is not None
         contents = field.contents()
         self.assertEqual(contents, [['hello', 'world'], ['!']])
 
