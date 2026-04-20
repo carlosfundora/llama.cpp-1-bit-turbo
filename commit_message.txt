@@ -1,0 +1,7 @@
+🔒 [security fix] Replace unsafe strcpy with ggml_set_name in ggml-opt.cpp
+
+🎯 **What:** Replaced the unsafe `strcpy(new_tensor->name, tensor->name)` with the safer library-provided alternative `ggml_set_name(new_tensor, tensor->name)`.
+
+⚠️ **Risk:** The previous use of `strcpy` posed a potential buffer overflow risk if `tensor->name` lacked null termination or exceeded `GGML_MAX_NAME` bounds, allowing unintended memory access and potential crashes.
+
+🛡️ **Solution:** `ggml_set_name` performs a bounded loop copy, iterating up to `sizeof(tensor->name) - 1` and ensuring the string is properly null-terminated, which safely mitigates the risk.
