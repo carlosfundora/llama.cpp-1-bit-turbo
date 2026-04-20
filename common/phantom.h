@@ -1,3 +1,6 @@
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 // PHANTOM-X speculative decoding for llama.cpp
 //
 // Single-file implementation of PHANTOM-X hybrid speculative decoding:
@@ -99,7 +102,11 @@ struct phantom_bloom {
     float occupancy() const {
         size_t set = 0;
         for (auto w : bits) {
+#if defined(_MSC_VER)
+            set += __popcnt64(w);
+#else
             set += __builtin_popcountll(w);
+#endif
         }
         return (float)set / (float)n_bits;
     }
