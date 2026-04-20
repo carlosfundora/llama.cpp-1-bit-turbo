@@ -4029,7 +4029,35 @@ class ExpertGatingFuncType(IntEnum):
     SIGMOID  = 2
 
 
-# TODO: add GGMLFileType from ggml_ftype in ggml.h
+class GGMLFileType(IntEnum):
+    UNKNOWN        = -1
+    ALL_F32        = 0
+    MOSTLY_F16     = 1   # except 1d tensors
+    MOSTLY_Q4_0    = 2   # except 1d tensors
+    MOSTLY_Q4_1    = 3   # except 1d tensors
+    MOSTLY_Q4_1_SOME_F16 = 4 # tok_embeddings.weight and output.weight are F16
+    MOSTLY_Q8_0    = 7   # except 1d tensors
+    MOSTLY_Q5_0    = 8   # except 1d tensors
+    MOSTLY_Q5_1    = 9   # except 1d tensors
+    MOSTLY_Q2_K    = 10  # except 1d tensors
+    MOSTLY_Q3_K    = 11  # except 1d tensors
+    MOSTLY_Q4_K    = 12  # except 1d tensors
+    MOSTLY_Q5_K    = 13  # except 1d tensors
+    MOSTLY_Q6_K    = 14  # except 1d tensors
+    MOSTLY_IQ2_XXS = 15  # except 1d tensors
+    MOSTLY_IQ2_XS  = 16  # except 1d tensors
+    MOSTLY_IQ3_XXS = 17  # except 1d tensors
+    MOSTLY_IQ1_S   = 18  # except 1d tensors
+    MOSTLY_IQ4_NL  = 19  # except 1d tensors
+    MOSTLY_IQ3_S   = 20  # except 1d tensors
+    MOSTLY_IQ2_S   = 21  # except 1d tensors
+    MOSTLY_IQ4_XS  = 22  # except 1d tensors
+    MOSTLY_IQ1_M   = 23  # except 1d tensors
+    MOSTLY_BF16    = 24  # except 1d tensors
+    MOSTLY_MXFP4   = 25  # except 1d tensors
+    MOSTLY_NVFP4   = 26  # except 1d tensors
+    MOSTLY_Q1_0    = 27  # except 1d tensors
+    MOSTLY_Q1_0_g128 = 28 # except 1d tensors
 
 
 # from llama_ftype in llama.h
