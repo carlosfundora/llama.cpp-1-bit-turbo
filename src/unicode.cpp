@@ -21,8 +21,32 @@ size_t unicode_len_utf8(char src) {
 
 static std::string unicode_cpts_to_utf8(const std::vector<uint32_t> & cps) {
     std::string result;
-    for (size_t i = 0; i < cps.size(); ++i) {
-        result.append(unicode_cpt_to_utf8(cps[i]));
+    size_t size = 0;
+    for (uint32_t cpt : cps) {
+        if (cpt <= 0x7f) size += 1;
+        else if (cpt <= 0x7ff) size += 2;
+        else if (cpt <= 0xffff) size += 3;
+        else if (cpt <= 0x10ffff) size += 4;
+        else throw std::invalid_argument("invalid codepoint");
+    }
+    result.resize(size);
+    char* dest = result.data();
+    for (uint32_t cpt : cps) {
+        if (cpt <= 0x7f) {
+            *dest++ = cpt;
+        } else if (cpt <= 0x7ff) {
+            *dest++ = 0xc0 | ((cpt >> 6) & 0x1f);
+            *dest++ = 0x80 | (cpt & 0x3f);
+        } else if (cpt <= 0xffff) {
+            *dest++ = 0xe0 | ((cpt >> 12) & 0x0f);
+            *dest++ = 0x80 | ((cpt >> 6) & 0x3f);
+            *dest++ = 0x80 | (cpt & 0x3f);
+        } else {
+            *dest++ = 0xf0 | ((cpt >> 18) & 0x07);
+            *dest++ = 0x80 | ((cpt >> 12) & 0x3f);
+            *dest++ = 0x80 | ((cpt >> 6) & 0x3f);
+            *dest++ = 0x80 | (cpt & 0x3f);
+        }
     }
     return result;
 }
