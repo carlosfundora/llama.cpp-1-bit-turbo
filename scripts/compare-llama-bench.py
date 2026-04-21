@@ -459,6 +459,7 @@ class LlamaBenchDataJSONL(LlamaBenchDataSQLite3):
         db_fields = LLAMA_BENCH_DB_FIELDS if tool == "llama-bench" else TEST_BACKEND_OPS_DB_FIELDS
 
         with open(data_file, "r", encoding="utf-8") as fp:
+            current_keys, sql, rows = None, "", []
             for i, line in enumerate(fp):
                 parsed = json.loads(line)
 
@@ -468,7 +469,21 @@ class LlamaBenchDataJSONL(LlamaBenchDataSQLite3):
                 if (missing_keys := self._check_keys(parsed.keys())):
                     raise RuntimeError(f"Missing required data key(s) at line {i + 1}: {', '.join(missing_keys)}")
 
-                self.cursor.execute(f"INSERT INTO {self.table_name}({', '.join(parsed.keys())}) VALUES({', '.join('?' * len(parsed))});", tuple(parsed.values()))
+                keys_tuple = tuple(parsed.keys())
+                if current_keys != keys_tuple:
+                    if rows:
+                        self.cursor.executemany(sql, rows)
+                        rows.clear()
+                    current_keys = keys_tuple
+                    sql = f"INSERT INTO {self.table_name}({', '.join(current_keys)}) VALUES({', '.join('?' * len(current_keys))});"
+
+                rows.append(tuple(parsed.values()))
+                if len(rows) >= 10000:
+                    self.cursor.executemany(sql, rows)
+                    rows.clear()
+
+            if rows:
+                self.cursor.executemany(sql, rows)
 
         self._builds_init()
 
@@ -497,6 +512,7 @@ class LlamaBenchDataJSON(LlamaBenchDataSQLite3):
             with open(data_file, "r", encoding="utf-8") as fp:
                 parsed = json.load(fp)
 
+                current_keys, sql, rows = None, "", []
                 for i, entry in enumerate(parsed):
                     for k in entry.keys() - set(db_fields):
                         del entry[k]
@@ -504,7 +520,21 @@ class LlamaBenchDataJSON(LlamaBenchDataSQLite3):
                     if (missing_keys := self._check_keys(entry.keys())):
                         raise RuntimeError(f"Missing required data key(s) at entry {i + 1}: {', '.join(missing_keys)}")
 
-                    self.cursor.execute(f"INSERT INTO {self.table_name}({', '.join(entry.keys())}) VALUES({', '.join('?' * len(entry))});", tuple(entry.values()))
+                    keys_tuple = tuple(entry.keys())
+                    if current_keys != keys_tuple:
+                        if rows:
+                            self.cursor.executemany(sql, rows)
+                            rows.clear()
+                        current_keys = keys_tuple
+                        sql = f"INSERT INTO {self.table_name}({', '.join(current_keys)}) VALUES({', '.join('?' * len(current_keys))});"
+
+                    rows.append(tuple(entry.values()))
+                    if len(rows) >= 10000:
+                        self.cursor.executemany(sql, rows)
+                        rows.clear()
+
+                if rows:
+                    self.cursor.executemany(sql, rows)
 
         self._builds_init()
 
@@ -533,6 +563,7 @@ class LlamaBenchDataCSV(LlamaBenchDataSQLite3):
 
         for data_file in data_files:
             with open(data_file, "r", encoding="utf-8") as fp:
+                current_keys, sql, rows = None, "", []
                 for i, parsed in enumerate(csv.DictReader(fp)):
                     keys = set(parsed.keys())
 
@@ -542,7 +573,21 @@ class LlamaBenchDataCSV(LlamaBenchDataSQLite3):
                     if (missing_keys := self._check_keys(keys)):
                         raise RuntimeError(f"Missing required data key(s) at line {i + 1}: {', '.join(missing_keys)}")
 
-                    self.cursor.execute(f"INSERT INTO {self.table_name}({', '.join(parsed.keys())}) VALUES({', '.join('?' * len(parsed))});", tuple(parsed.values()))
+                    keys_tuple = tuple(parsed.keys())
+                    if current_keys != keys_tuple:
+                        if rows:
+                            self.cursor.executemany(sql, rows)
+                            rows.clear()
+                        current_keys = keys_tuple
+                        sql = f"INSERT INTO {self.table_name}({', '.join(current_keys)}) VALUES({', '.join('?' * len(current_keys))});"
+
+                    rows.append(tuple(parsed.values()))
+                    if len(rows) >= 10000:
+                        self.cursor.executemany(sql, rows)
+                        rows.clear()
+
+                if rows:
+                    self.cursor.executemany(sql, rows)
 
         self._builds_init()
 
@@ -931,8 +976,8 @@ else:
 if known_args.plot:
     def create_performance_plot(table_data: list[list[str]], headers: list[str], baseline_name: str, compare_name: str, output_file: str, plot_x_param: str, log_scale: bool = False, tool_type: str = "llama-bench", metric_name: str = "t/s"):
         try:
-            import matplotlib
-            import matplotlib.pyplot as plt
+            import matplotlib  # type: ignore
+            import matplotlib.pyplot as plt  # type: ignore
             matplotlib.use('Agg')
         except ImportError as e:
             logger.error("matplotlib is required for --plot.")
