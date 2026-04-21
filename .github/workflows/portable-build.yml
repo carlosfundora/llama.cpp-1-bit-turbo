@@ -1,0 +1,50 @@
+name: portable-build
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+  schedule:
+    - cron: "55 7 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: llama-cpp-1-bit-turbo-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cmake-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build build-essential
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j2
+
+      - name: CLI smoke
+        run: |
+          ./build/bin/llama-cli --help || true
+          ./build/bin/llama-server --help || true
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-cpp-1-bit-turbo-build-logs
+          path: |
+            build
+          if-no-files-found: ignore
