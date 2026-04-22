@@ -219,13 +219,21 @@ static const struct ggml_type_traits_cpu type_traits_cpu[GGML_TYPE_COUNT] = {
     },
     [GGML_TYPE_Q1_0] = {
         .from_float               = quantize_row_q1_0,
+#if defined(__ARM_NEON) || defined(__AVX2__) || defined(__AVX512F__)
         .vec_dot                  = ggml_vec_dot_q1_0_q8_0,
+#else
+        .vec_dot                  = ggml_vec_dot_q1_0_q8_0_generic,
+#endif
         .vec_dot_type             = GGML_TYPE_Q8_0,
         .nrows                    = 1,
     },
     [GGML_TYPE_Q1_0_g128] = {
         .from_float               = quantize_row_q1_0_g128,
+#if defined(__ARM_NEON) || defined(__AVX2__) || defined(__AVX512F__)
         .vec_dot                  = ggml_vec_dot_q1_0_g128_q8_0,
+#else
+        .vec_dot                  = ggml_vec_dot_q1_0_g128_q8_0_generic,
+#endif
         .vec_dot_type             = GGML_TYPE_Q8_0,
         .nrows                    = 1,
     },
@@ -2918,7 +2926,7 @@ struct ggml_cplan ggml_graph_plan(
                 case GGML_OP_FLASH_ATTN_BACK:
                     {
                         const int64_t    D = node->src[0]->ne[0];
-                        const int64_t ne11 = ggml_up(node->src[1]->ne[1], GGML_SOFT_MAX_UNROLL);
+                        const int ne11 = (int)ggml_up(node->src[1]->ne[1], GGML_SOFT_MAX_UNROLL);
                         const int64_t mxDn = MAX(D, ne11) * 2; // *2 because of S and SM in ggml_compute_forward_flash_attn_back
                         if (node->src[1]->type == GGML_TYPE_F32) {
                             cur  = sizeof(float)*mxDn*n_tasks; // TODO: this can become (n_tasks-1)

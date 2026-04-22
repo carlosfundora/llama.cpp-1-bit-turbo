@@ -166,6 +166,7 @@ void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
 void ggml_vec_dot_q1_0_g128_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
     const int qk = QK1_0_g128;  // 128
     const int nb = n / qk;
+    (void)nb; // suppress unused warning if generic is used
 
     assert(n % qk == 0);
     assert(nrc == 1);
