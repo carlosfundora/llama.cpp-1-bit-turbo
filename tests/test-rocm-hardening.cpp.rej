@@ -1,0 +1,12 @@
+--- test-rocm-hardening.cpp
++++ test-rocm-hardening.cpp
+@@ -9,7 +9,9 @@
+ #include <string>
+ #include <vector>
+ #include <stdio.h>
++#ifndef _WIN32
+ #include <unistd.h>
++#endif
+
+ static void print_usage(int argc, char ** argv) {
+     (void) argc;

@@ -460,7 +460,7 @@ void dequantize_row_q1_0_g128(const block_q1_0_g128 * GGML_RESTRICT x, float * G
                 const uint32_t b3 = (byte >> (bit + 3)) & 1;
 
                 // Use bit select: if bit=1 select d, else select -d
-                float32x4_t result = vdupq_n_f32(0.0f);
+                float32x4_t result = vdupq_n_f32(0.0f); // Just to init
                 result = vsetq_lane_f32(b0 ? d : -d, result, 0);
                 result = vsetq_lane_f32(b1 ? d : -d, result, 1);
                 result = vsetq_lane_f32(b2 ? d : -d, result, 2);

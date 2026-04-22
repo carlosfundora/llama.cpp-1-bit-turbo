@@ -1,0 +1,29 @@
+--- cmake/triton_aot_compile.py
++++ cmake/triton_aot_compile.py
+@@ -17,9 +17,9 @@
+ import os
+ import sys
+
+-import triton
+-import triton.language as tl
+-from triton.compiler.compiler import compile as tc_compile, ASTSource
++import triton  # type: ignore
++import triton.language as tl  # type: ignore
++from triton.compiler.compiler import compile as tc_compile, ASTSource  # type: ignore
+
+ # ---------------------------------------------------------------------------
+ # Standalone Triton kernel definitions (extracted from sglang RotorQuant engine)
+@@ -501,11 +501,11 @@
+     """Return a GPUTarget object matching the requested backend."""
+     arch = int(arch.replace("gfx", "").replace("sm", ""))
+     if target_name == "hip":
+-        from triton.backends.amd.compiler import GPUTarget
++        from triton.backends.amd.compiler import GPUTarget  # type: ignore
+         warp_size = 64
+         return GPUTarget("hip", arch, warp_size)
+     elif target_name == "cuda":
+-        from triton.backends.nvidia.compiler import GPUTarget
++        from triton.backends.nvidia.compiler import GPUTarget  # type: ignore
+         warp_size = 32
+         return GPUTarget("cuda", arch, warp_size)
+     else:
