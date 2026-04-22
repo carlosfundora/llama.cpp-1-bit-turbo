@@ -441,8 +441,8 @@ void dequantize_row_q1_0_g128(const block_q1_0_g128 * GGML_RESTRICT x, float * G
 #if defined(__ARM_NEON)
     for (int i = 0; i < nb; i++) {
         const float d = GGML_FP16_TO_FP32(x[i].d);
-        const float32x4_t vd = vdupq_n_f32(d);
-        const float32x4_t vnd = vdupq_n_f32(-d);
+
+
 
         float * GGML_RESTRICT yptr = y + i * qk;
 
@@ -460,7 +460,7 @@ void dequantize_row_q1_0_g128(const block_q1_0_g128 * GGML_RESTRICT x, float * G
                 const uint32_t b3 = (byte >> (bit + 3)) & 1;
 
                 // Use bit select: if bit=1 select d, else select -d
-                float32x4_t result;
+                float32x4_t result = vdupq_n_f32(0.0f);
                 result = vsetq_lane_f32(b0 ? d : -d, result, 0);
                 result = vsetq_lane_f32(b1 ? d : -d, result, 1);
                 result = vsetq_lane_f32(b2 ? d : -d, result, 2);
