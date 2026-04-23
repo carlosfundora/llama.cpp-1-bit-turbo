@@ -184,9 +184,9 @@ static void ggml_backend_blas_out_prod(ggml_backend_blas_context * ctx, struct g
     // src1->data already contains a transposed version, so sgemm mustn't
     // transpose it further.
 
-    int n = src0->ne[0];
-    int k = src0->ne[1];
-    int m = src1->ne[0];
+    int n = (int)src0->ne[0];
+    int k = (int)src0->ne[1];
+    int m = (int)src1->ne[0];
 
     CBLAS_TRANSPOSE transposeA;
     int lda;

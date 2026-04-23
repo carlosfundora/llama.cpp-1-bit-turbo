@@ -137,7 +137,7 @@ void quantize_row_q8_K(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, in
 
 //===================================== Dot products =================================
 
-void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {    
+void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
     // For nrc > 1, call generic multiple times
     if (nrc == 1) {
         ggml_vec_dot_q1_0_q8_0_generic(n, s, bs, vx, bx, vy, by, nrc);
@@ -147,7 +147,7 @@ void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
         const int nb = n / qk;
         const size_t x_size = nb * sizeof(block_q1_0);
         const size_t y_size = nb * sizeof(block_q8_0);
-        
+
         for (int i = 0; i < nrc; i++) {
             ggml_vec_dot_q1_0_q8_0_generic(
                 n,
@@ -166,6 +166,7 @@ void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
 void ggml_vec_dot_q1_0_g128_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
     const int qk = QK1_0_g128;  // 128
     const int nb = n / qk;
+    (void)nb; // suppress unused warning if generic is used
 
     assert(n % qk == 0);
     assert(nrc == 1);

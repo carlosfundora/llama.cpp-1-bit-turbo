@@ -100,43 +100,43 @@ struct is_type_qkk : std::integral_constant<bool,
         switch (QT) {                                                                  \
             case GGML_TYPE_Q4_0: {                                                     \
                 using type = block_q4_0;                                               \
-                using vec_dot_type = block_q8_0;                                       \
+                using vec_dot_type = block_q8_0; (void)sizeof(type); (void)sizeof(vec_dot_type); \
                 constexpr int blck_size = QK4_0;                                       \
                 return __VA_ARGS__();                                                  \
             }                                                                          \
             case GGML_TYPE_Q4_1: {                                                     \
                 using type = block_q4_1;                                               \
-                using vec_dot_type = block_q8_1;                                       \
+                using vec_dot_type = block_q8_1; (void)sizeof(type); (void)sizeof(vec_dot_type); \
                 constexpr int blck_size = QK4_1;                                       \
                 return __VA_ARGS__();                                                  \
             }                                                                          \
             case GGML_TYPE_Q8_0: {                                                     \
                 using type = block_q8_0;                                               \
-                using vec_dot_type = block_q8_0;                                       \
+                using vec_dot_type = block_q8_0; (void)sizeof(type); (void)sizeof(vec_dot_type); \
                 constexpr int blck_size = QK8_0;                                       \
                 return __VA_ARGS__();                                                  \
             }                                                                          \
             case GGML_TYPE_Q4_K: {                                                     \
                 using type = block_q4_K;                                               \
-                using vec_dot_type = block_q8_K;                                       \
+                using vec_dot_type = block_q8_K; (void)sizeof(type); (void)sizeof(vec_dot_type); \
                 constexpr int blck_size = QK_K;                                        \
                 return __VA_ARGS__();                                                  \
             }                                                                          \
             case GGML_TYPE_Q5_K: {                                                     \
                 using type = block_q5_K;                                               \
-                using vec_dot_type = block_q8_K;                                       \
+                using vec_dot_type = block_q8_K; (void)sizeof(type); (void)sizeof(vec_dot_type); \
                 constexpr int blck_size = QK_K;                                        \
                 return __VA_ARGS__();                                                  \
             }                                                                          \
             case GGML_TYPE_Q6_K: {                                                     \
                 using type = block_q6_K;                                               \
-                using vec_dot_type = block_q8_K;                                       \
+                using vec_dot_type = block_q8_K; (void)sizeof(type); (void)sizeof(vec_dot_type); \
                 constexpr int blck_size = QK_K;                                        \
                 return __VA_ARGS__();                                                  \
             }                                                                          \
             case GGML_TYPE_IQ4_XS: {                                                   \
                 using type = block_iq4_xs;                                             \
-                using vec_dot_type = block_q8_K;                                       \
+                using vec_dot_type = block_q8_K; (void)sizeof(type); (void)sizeof(vec_dot_type); \
                 constexpr int blck_size = QK_K;                                        \
                 return __VA_ARGS__();                                                  \
             }                                                                          \

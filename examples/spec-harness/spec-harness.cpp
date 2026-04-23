@@ -224,7 +224,9 @@ int main(int argc, char ** argv) {
         std::string dir = output_path.substr(0, output_path.find_last_of('/'));
         if (!dir.empty()) {
             std::string cmd = "mkdir -p '" + dir + "'";
-            (void)system(cmd.c_str());
+            if (system(cmd.c_str()) != 0) {
+                LOG_ERR("Failed to create directory: %s\n", dir.c_str());
+            }
         }
 
         std::ofstream out(output_path, std::ios::binary);

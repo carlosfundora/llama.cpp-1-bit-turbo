@@ -3399,9 +3399,9 @@ int ggml_metal_op_norm(ggml_metal_op_t ctx, int idx) {
 
             bid_fuse[n_fuse] = ggml_metal_get_buffer_id(f1->src[1]);
 
-            args.nef1[n_fuse + 1] = f1->src[1]->ne[1];
-            args.nef2[n_fuse + 1] = f1->src[1]->ne[2];
-            args.nef3[n_fuse + 1] = f1->src[1]->ne[3];
+            args.nef1[n_fuse + 1] = (int32_t)f1->src[1]->ne[1];
+            args.nef2[n_fuse + 1] = (int32_t)f1->src[1]->ne[2];
+            args.nef3[n_fuse + 1] = (int32_t)f1->src[1]->ne[3];
 
             args.nbf1[n_fuse + 1] = f1->src[1]->nb[1];
             args.nbf2[n_fuse + 1] = f1->src[1]->nb[2];
