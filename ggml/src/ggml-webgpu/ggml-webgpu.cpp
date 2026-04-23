@@ -842,7 +842,7 @@ static binary_overlap_flags ggml_webgpu_detect_binary_overlap(ggml_tensor * src0
 
 static webgpu_command ggml_webgpu_cpy(webgpu_context & ctx, ggml_tensor * src, ggml_tensor * dst) {
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src,
+        .src0 = src, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
     };
@@ -885,8 +885,8 @@ static webgpu_command ggml_webgpu_set(webgpu_context & ctx, ggml_tensor * src0, 
     const bool inplace = ggml_webgpu_tensor_equal(src0, dst);
 
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src0,
-        .src1        = src1,
+        .src0 = src0, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
+        .src1 = src1, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
         .inplace     = inplace,
@@ -945,7 +945,7 @@ static webgpu_command ggml_webgpu_set(webgpu_context & ctx, ggml_tensor * src0, 
 
 static webgpu_command ggml_webgpu_pad(webgpu_context & ctx, ggml_tensor * src, ggml_tensor * dst) {
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0 = src, .dst = dst, .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup
+        .src0 = src, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr, .dst = dst, .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup
     };
 
     webgpu_pipeline pipeline = ctx->shader_lib->get_pad_pipeline(shader_lib_ctx);
@@ -1064,8 +1064,8 @@ static webgpu_command ggml_webgpu_ssm_conv(webgpu_context & ctx,
                                            ggml_tensor *    src1,
                                            ggml_tensor *    dst) {
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src0,
-        .src1        = src1,
+        .src0 = src0, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
+        .src1 = src1, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
     };
@@ -1124,9 +1124,9 @@ static webgpu_command ggml_webgpu_gated_delta_net(webgpu_context & ctx,
                                                   ggml_tensor *    src5,
                                                   ggml_tensor *    dst) {
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src0,
-        .src1        = src1,
-        .src2        = src2,
+        .src0 = src0, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
+        .src1 = src1, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
+        .src2 = src2, .src3 = nullptr, .src4 = nullptr,
         .src3        = src3,
         .src4        = src4,
         .dst         = dst,
@@ -1211,7 +1211,7 @@ static std::optional<webgpu_command> ggml_webgpu_set_rows(webgpu_context & ctx,
     }
 
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src,
+        .src0 = src, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .src1        = idx,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup
@@ -1284,7 +1284,7 @@ static webgpu_command ggml_webgpu_get_rows(webgpu_context & ctx,
     const bool float_parallel = src->type == GGML_TYPE_F32 || src->type == GGML_TYPE_F16 || src->type == GGML_TYPE_I32;
 
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src,
+        .src0 = src, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .src1        = nullptr,
         .dst         = dst,
         .max_wg_size = WEBGPU_MAX_WG_SIZE,
@@ -1811,7 +1811,7 @@ static webgpu_command ggml_webgpu_unary_op(webgpu_context & ctx, ggml_tensor * s
     bool inplace  = ggml_webgpu_tensor_equal(src, dst) || (dst->op == GGML_OP_FILL);
 
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src,
+        .src0 = src, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .src1        = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
@@ -1891,8 +1891,8 @@ static webgpu_command ggml_webgpu_binary_op(webgpu_context & ctx,
     binary_overlap_flags flags = ggml_webgpu_detect_binary_overlap(src0, src1, dst);
 
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src0,
-        .src1        = src1,
+        .src0 = src0, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
+        .src1 = src1, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
         .inplace     = flags.inplace,
@@ -2030,8 +2030,8 @@ static webgpu_command ggml_webgpu_concat(webgpu_context & ctx,
     };
 
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src0,
-        .src1        = src1,
+        .src0 = src0, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
+        .src1 = src1, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
     };
@@ -2073,7 +2073,7 @@ static webgpu_command ggml_webgpu_repeat(webgpu_context & ctx, ggml_tensor * src
     };
 
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src0,
+        .src0 = src0, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
     };
@@ -2117,7 +2117,7 @@ static webgpu_command ggml_webgpu_row_norm(webgpu_context & ctx, ggml_tensor * s
     }
 
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src,
+        .src0 = src, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
         .inplace     = inplace,
@@ -2133,9 +2133,9 @@ static webgpu_command ggml_webgpu_rope(webgpu_context & ctx,
                                        ggml_tensor *    src2,
                                        ggml_tensor *    dst) {
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src0,
-        .src1        = src1,
-        .src2        = src2,
+        .src0 = src0, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
+        .src1 = src1, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
+        .src2 = src2, .src3 = nullptr, .src4 = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
         .inplace     = ggml_webgpu_tensor_equal(src0, dst),
@@ -2233,8 +2233,8 @@ static webgpu_command ggml_webgpu_rope(webgpu_context & ctx,
 
 static webgpu_command ggml_webgpu_glu(webgpu_context & ctx, ggml_tensor * src0, ggml_tensor * src1, ggml_tensor * dst) {
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src0,
-        .src1        = src1,
+        .src0 = src0, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
+        .src1 = src1, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
     };
@@ -2297,7 +2297,7 @@ static webgpu_command ggml_webgpu_scale(webgpu_context & ctx, ggml_tensor * src,
     bool inplace = ggml_webgpu_tensor_equal(src, dst);
 
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src,
+        .src0 = src, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .src1        = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
@@ -2350,9 +2350,9 @@ static webgpu_command ggml_webgpu_soft_max(webgpu_context & ctx,
                                            ggml_tensor *    src2,
                                            ggml_tensor *    dst) {
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src0,
-        .src1        = src1,
-        .src2        = src2,
+        .src0 = src0, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
+        .src1 = src1, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
+        .src2 = src2, .src3 = nullptr, .src4 = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
         .inplace     = ggml_webgpu_tensor_equal(src0, dst),
@@ -2444,7 +2444,7 @@ static webgpu_command ggml_webgpu_argmax(webgpu_context & ctx, ggml_tensor * src
     };
 
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0 = src, .dst = dst, .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup
+        .src0 = src, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr, .dst = dst, .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup
     };
 
     webgpu_pipeline pipeline = ctx->shader_lib->get_argmax_pipeline(shader_lib_ctx);
@@ -2626,7 +2626,7 @@ static webgpu_command ggml_webgpu_cumsum(webgpu_context & ctx, ggml_tensor * src
     };
 
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0        = src,
+        .src0 = src, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr,
         .src1        = nullptr,
         .dst         = dst,
         .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup,
@@ -2660,7 +2660,7 @@ static webgpu_command ggml_webgpu_sum_rows(webgpu_context & ctx, ggml_tensor * s
     };
 
     ggml_webgpu_shader_lib_context shader_lib_ctx = {
-        .src0 = src, .dst = dst, .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup
+        .src0 = src, .src1 = nullptr, .src2 = nullptr, .src3 = nullptr, .src4 = nullptr, .dst = dst, .max_wg_size = ctx->global_ctx->capabilities.limits.maxComputeInvocationsPerWorkgroup
     };
 
     webgpu_pipeline pipeline = ctx->shader_lib->get_sum_rows_pipeline(shader_lib_ctx);
