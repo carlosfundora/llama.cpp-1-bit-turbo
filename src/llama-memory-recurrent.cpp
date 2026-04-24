@@ -153,7 +153,7 @@ bool llama_memory_recurrent::seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos
 
     // models like Mamba or RWKV can't have a state partially erased at the end
     // of the sequence because their state isn't preserved for previous tokens
-    if (seq_id >= (int64_t) size) {
+    if (seq_id >= (int64_t) cells.size()) {
         // could be fatal
         return false;
     }
@@ -223,7 +223,7 @@ void llama_memory_recurrent::seq_cp(llama_seq_id seq_id_src, llama_seq_id seq_id
         p1 = std::numeric_limits<llama_pos>::max();
     }
 
-    if ((uint32_t) seq_id_dst < size && (uint32_t) seq_id_src < size) {
+    if ((uint32_t) seq_id_dst < cells.size() && (uint32_t) seq_id_src < cells.size()) {
         auto & tail_src = cells[seq_id_src];
         auto & tail_dst = cells[seq_id_dst];
         if (tail_dst.tail >= 0) {
@@ -298,7 +298,7 @@ void llama_memory_recurrent::seq_add(llama_seq_id seq_id, llama_pos p0, llama_po
     }
 
     // for Mamba-like or RWKV models, only the pos needs to be shifted
-    if (0 <= seq_id && seq_id < (int64_t) size) {
+    if (0 <= seq_id && seq_id < (int64_t) cells.size()) {
         const int32_t tail_id = cells[seq_id].tail;
         if (tail_id >= 0) {
             auto & cell = cells[tail_id];
@@ -328,7 +328,7 @@ void llama_memory_recurrent::seq_div(llama_seq_id seq_id, llama_pos p0, llama_po
     }
 
     // for Mamba-like or RWKV models, only the pos needs to be changed
-    if (0 <= seq_id && seq_id < (int64_t) size) {
+    if (0 <= seq_id && seq_id < (int64_t) cells.size()) {
         const int32_t tail_id = cells[seq_id].tail;
         if (tail_id >= 0) {
             auto & cell = cells[tail_id];
@@ -477,12 +477,15 @@ bool llama_memory_recurrent::find_slot(const llama_ubatch & ubatch) {
         for (uint32_t j = 0; j < n_seq_id; ++j) {
             const llama_seq_id seq_id = ubatch.seq_id[i][j];
 
-            if (seq_id < 0 || (uint32_t) seq_id >= size) {
+            if (seq_id < 0 || (uint32_t) seq_id >= n_seq_max) {
                 // too big seq_id
-                // TODO: would it be possible to resize the cache instead?
                 LLAMA_LOG_ERROR("%s: seq_id=%d >= n_seq_max=%u Try using a bigger --parallel value\n", __func__, seq_id, n_seq_max);
                 return false;
             }
+            if ((uint32_t) seq_id >= cells.size()) {
+                cells.resize(seq_id + 1);
+            }
+
             if (j > 0) {
                 auto & seq = cells[seq_id];
                 if (seq.tail >= 0) {
@@ -504,7 +507,7 @@ bool llama_memory_recurrent::find_slot(const llama_ubatch & ubatch) {
 #ifndef NDEBUG
     {
         std::vector<int32_t> tails_verif;
-        tails_verif.assign(size, -1);
+        tails_verif.assign(cells.size(), -1);
         for (uint32_t i = 0; i < size; ++i) {
             auto & cell = cells[i];
             for (llama_seq_id seq_id : cell.seq_id) {
@@ -514,7 +517,7 @@ bool llama_memory_recurrent::find_slot(const llama_ubatch & ubatch) {
                 tails_verif[seq_id] = i;
             }
         }
-        for (uint32_t i = 0; i < size; ++i) {
+        for (uint32_t i = 0; i < cells.size(); ++i) {
             if (tails_verif[i] != cells[i].tail) {
                 LLAMA_LOG_ERROR("%s: wrong tail for seq_id %d, (%d instead of %d)\n", __func__, i, cells[i].tail, tails_verif[i]);
             }
@@ -914,15 +917,13 @@ bool llama_memory_recurrent::state_read_meta(llama_io_read_i & io, uint32_t cell
         clear(true);
 
         for (uint32_t i = 0; i < cell_count; ++i) {
-            auto & cell = cells[i];
-
             llama_pos pos;
             uint32_t  n_seq_id;
 
             io.read_to(&pos,      sizeof(pos));
             io.read_to(&n_seq_id, sizeof(n_seq_id));
 
-            cell.pos = pos;
+            cells[i].pos = pos;
 
             for (uint32_t j = 0; j < n_seq_id; ++j) {
                 llama_seq_id seq_id;
@@ -933,7 +934,13 @@ bool llama_memory_recurrent::state_read_meta(llama_io_read_i & io, uint32_t cell
                     return false;
                 }
 
-                cell.seq_id.insert(seq_id);
+                if ((uint32_t) seq_id >= cells.size()) {
+                    // Pre-allocate to handle very large seq_id safely, avoiding multiple reallocations
+                    // and validate it doesn't exceed n_seq_max which acts as an absolute upper bound.
+                    cells.resize(seq_id + 1);
+                }
+
+                cells[i].seq_id.insert(seq_id);
 
                 int32_t & tail = cells[seq_id].tail;
                 if (tail != -1) {
