@@ -17,9 +17,9 @@ import argparse
 import os
 import sys
 
-import triton
-import triton.language as tl
-from triton.compiler.compiler import compile as tc_compile, ASTSource
+import triton  # type: ignore
+import triton.language as tl  # type: ignore
+from triton.compiler.compiler import compile as tc_compile, ASTSource  # type: ignore
 
 # ---------------------------------------------------------------------------
 # Standalone Triton kernel definitions (extracted from sglang RotorQuant engine)
@@ -31,53 +31,53 @@ def _planar2_quantize_kernel(
     input_ptr, indices_ptr,
     rot2_ptr, centroids_ptr,
     batch_size, emb_dim,
-    n_groups: tl.constexpr,
-    n_levels: tl.constexpr,
+    n_groups: tl.constexpr,  # noqa: F821
+    n_levels: tl.constexpr,  # noqa: F821
     stride_in_b, stride_in_d,
     stride_idx_b, stride_idx_d,
-    BLOCK_G: tl.constexpr,
+    BLOCK_G: tl.constexpr,  # noqa: F821
 ):
     """Givens rotate → nearest centroid → store int8 index (3-bit path)."""
-    pid_b = tl.program_id(0)
-    pid_g = tl.program_id(1)
+    pid_b = tl.program_id(0)  # noqa: F821
+    pid_g = tl.program_id(1)  # noqa: F821
 
-    g_offs = pid_g * BLOCK_G + tl.arange(0, BLOCK_G)
+    g_offs = pid_g * BLOCK_G + tl.arange(0, BLOCK_G)  # noqa: F821
     g_mask = g_offs < n_groups
 
-    cos_t = tl.load(rot2_ptr + g_offs * 2 + 0, mask=g_mask, other=1.0)
-    sin_t = tl.load(rot2_ptr + g_offs * 2 + 1, mask=g_mask, other=0.0)
+    cos_t = tl.load(rot2_ptr + g_offs * 2 + 0, mask=g_mask, other=1.0)  # noqa: F821
+    sin_t = tl.load(rot2_ptr + g_offs * 2 + 1, mask=g_mask, other=0.0)  # noqa: F821
 
     d0 = g_offs * 2
-    v0 = tl.load(input_ptr + pid_b * stride_in_b + d0 * stride_in_d,
+    v0 = tl.load(input_ptr + pid_b * stride_in_b + d0 * stride_in_d,  # noqa: F821
                  mask=g_mask & (d0 < emb_dim), other=0.0)
-    v1 = tl.load(input_ptr + pid_b * stride_in_b + (d0 + 1) * stride_in_d,
+    v1 = tl.load(input_ptr + pid_b * stride_in_b + (d0 + 1) * stride_in_d,  # noqa: F821
                  mask=g_mask & ((d0 + 1) < emb_dim), other=0.0)
 
     r0 = cos_t * v0 - sin_t * v1
     r1 = sin_t * v0 + cos_t * v1
 
-    best_idx0 = tl.zeros_like(r0).to(tl.int32)
-    best_dist0 = tl.abs(r0 - tl.load(centroids_ptr))
-    for i in tl.static_range(1, n_levels):
-        c = tl.load(centroids_ptr + i)
-        dd = tl.abs(r0 - c)
+    best_idx0 = tl.zeros_like(r0).to(tl.int32)  # noqa: F821
+    best_dist0 = tl.abs(r0 - tl.load(centroids_ptr))  # noqa: F821
+    for i in tl.static_range(1, n_levels):  # noqa: F821
+        c = tl.load(centroids_ptr + i)  # noqa: F821
+        dd = tl.abs(r0 - c)  # noqa: F821
         mask = dd < best_dist0
-        best_dist0 = tl.where(mask, dd, best_dist0)
-        best_idx0 = tl.where(mask, i, best_idx0)
+        best_dist0 = tl.where(mask, dd, best_dist0)  # noqa: F821
+        best_idx0 = tl.where(mask, i, best_idx0)  # noqa: F821
 
-    best_idx1 = tl.zeros_like(r1).to(tl.int32)
-    best_dist1 = tl.abs(r1 - tl.load(centroids_ptr))
-    for i in tl.static_range(1, n_levels):
-        c = tl.load(centroids_ptr + i)
-        dd = tl.abs(r1 - c)
+    best_idx1 = tl.zeros_like(r1).to(tl.int32)  # noqa: F821
+    best_dist1 = tl.abs(r1 - tl.load(centroids_ptr))  # noqa: F821
+    for i in tl.static_range(1, n_levels):  # noqa: F821
+        c = tl.load(centroids_ptr + i)  # noqa: F821
+        dd = tl.abs(r1 - c)  # noqa: F821
         mask = dd < best_dist1
-        best_dist1 = tl.where(mask, dd, best_dist1)
-        best_idx1 = tl.where(mask, i, best_idx1)
+        best_dist1 = tl.where(mask, dd, best_dist1)  # noqa: F821
+        best_idx1 = tl.where(mask, i, best_idx1)  # noqa: F821
 
-    tl.store(indices_ptr + pid_b * stride_idx_b + d0 * stride_idx_d,
-             best_idx0.to(tl.int8), mask=g_mask & (d0 < emb_dim))
-    tl.store(indices_ptr + pid_b * stride_idx_b + (d0 + 1) * stride_idx_d,
-             best_idx1.to(tl.int8), mask=g_mask & ((d0 + 1) < emb_dim))
+    tl.store(indices_ptr + pid_b * stride_idx_b + d0 * stride_idx_d,  # noqa: F821
+             best_idx0.to(tl.int8), mask=g_mask & (d0 < emb_dim))  # noqa: F821
+    tl.store(indices_ptr + pid_b * stride_idx_b + (d0 + 1) * stride_idx_d,  # noqa: F821
+             best_idx1.to(tl.int8), mask=g_mask & ((d0 + 1) < emb_dim))  # noqa: F821
 
 
 @triton.jit
@@ -85,38 +85,38 @@ def _planar2_dequantize_kernel(
     indices_ptr, output_ptr,
     rot2_ptr, centroids_ptr,
     batch_size, emb_dim,
-    n_groups: tl.constexpr,
-    n_levels: tl.constexpr,
+    n_groups: tl.constexpr,  # noqa: F821
+    n_levels: tl.constexpr,  # noqa: F821
     stride_idx_b, stride_idx_d,
     stride_out_b, stride_out_d,
-    BLOCK_G: tl.constexpr,
+    BLOCK_G: tl.constexpr,  # noqa: F821
 ):
     """Load int8 index → centroid lookup → inverse Givens rotate → fp16."""
-    pid_b = tl.program_id(0)
-    pid_g = tl.program_id(1)
+    pid_b = tl.program_id(0)  # noqa: F821
+    pid_g = tl.program_id(1)  # noqa: F821
 
-    g_offs = pid_g * BLOCK_G + tl.arange(0, BLOCK_G)
+    g_offs = pid_g * BLOCK_G + tl.arange(0, BLOCK_G)  # noqa: F821
     g_mask = g_offs < n_groups
 
-    cos_t = tl.load(rot2_ptr + g_offs * 2 + 0, mask=g_mask, other=1.0)
-    sin_t = tl.load(rot2_ptr + g_offs * 2 + 1, mask=g_mask, other=0.0)
+    cos_t = tl.load(rot2_ptr + g_offs * 2 + 0, mask=g_mask, other=1.0)  # noqa: F821
+    sin_t = tl.load(rot2_ptr + g_offs * 2 + 1, mask=g_mask, other=0.0)  # noqa: F821
 
     d0 = g_offs * 2
-    idx0 = tl.load(indices_ptr + pid_b * stride_idx_b + d0 * stride_idx_d,
-                   mask=g_mask & (d0 < emb_dim), other=0).to(tl.int32)
-    idx1 = tl.load(indices_ptr + pid_b * stride_idx_b + (d0 + 1) * stride_idx_d,
-                   mask=g_mask & ((d0 + 1) < emb_dim), other=0).to(tl.int32)
+    idx0 = tl.load(indices_ptr + pid_b * stride_idx_b + d0 * stride_idx_d,  # noqa: F821
+                   mask=g_mask & (d0 < emb_dim), other=0).to(tl.int32)  # noqa: F821
+    idx1 = tl.load(indices_ptr + pid_b * stride_idx_b + (d0 + 1) * stride_idx_d,  # noqa: F821
+                   mask=g_mask & ((d0 + 1) < emb_dim), other=0).to(tl.int32)  # noqa: F821
 
-    q0 = tl.load(centroids_ptr + idx0, mask=g_mask, other=0.0)
-    q1 = tl.load(centroids_ptr + idx1, mask=g_mask, other=0.0)
+    q0 = tl.load(centroids_ptr + idx0, mask=g_mask, other=0.0)  # noqa: F821
+    q1 = tl.load(centroids_ptr + idx1, mask=g_mask, other=0.0)  # noqa: F821
 
     # Inverse Givens: R^T = [[cos, sin], [-sin, cos]]
     f0 = cos_t * q0 + sin_t * q1
     f1 = -sin_t * q0 + cos_t * q1
 
-    tl.store(output_ptr + pid_b * stride_out_b + d0 * stride_out_d,
+    tl.store(output_ptr + pid_b * stride_out_b + d0 * stride_out_d,  # noqa: F821
              f0, mask=g_mask & (d0 < emb_dim))
-    tl.store(output_ptr + pid_b * stride_out_b + (d0 + 1) * stride_out_d,
+    tl.store(output_ptr + pid_b * stride_out_b + (d0 + 1) * stride_out_d,  # noqa: F821
              f1, mask=g_mask & ((d0 + 1) < emb_dim))
 
 
@@ -125,52 +125,52 @@ def _fused_planar4_quant_pack_kernel(
     input_ptr, packed_ptr,
     rot2_ptr, centroids_ptr,
     batch_size, emb_dim,
-    n_groups: tl.constexpr,
-    n_levels: tl.constexpr,
+    n_groups: tl.constexpr,  # noqa: F821
+    n_levels: tl.constexpr,  # noqa: F821
     stride_in_b, stride_in_d,
     stride_pack_b, stride_pack_g,
-    BLOCK_G: tl.constexpr,
+    BLOCK_G: tl.constexpr,  # noqa: F821
 ):
     """Fused: Givens rotate → nearest centroid → 4-bit pack (lo|hi<<4 per byte)."""
-    pid_b = tl.program_id(0)
-    pid_g = tl.program_id(1)
+    pid_b = tl.program_id(0)  # noqa: F821
+    pid_g = tl.program_id(1)  # noqa: F821
 
-    g_offs = pid_g * BLOCK_G + tl.arange(0, BLOCK_G)
+    g_offs = pid_g * BLOCK_G + tl.arange(0, BLOCK_G)  # noqa: F821
     g_mask = g_offs < n_groups
 
-    cos_t = tl.load(rot2_ptr + g_offs * 2 + 0, mask=g_mask, other=1.0)
-    sin_t = tl.load(rot2_ptr + g_offs * 2 + 1, mask=g_mask, other=0.0)
+    cos_t = tl.load(rot2_ptr + g_offs * 2 + 0, mask=g_mask, other=1.0)  # noqa: F821
+    sin_t = tl.load(rot2_ptr + g_offs * 2 + 1, mask=g_mask, other=0.0)  # noqa: F821
 
     d0 = g_offs * 2
-    v0 = tl.load(input_ptr + pid_b * stride_in_b + d0 * stride_in_d,
+    v0 = tl.load(input_ptr + pid_b * stride_in_b + d0 * stride_in_d,  # noqa: F821
                  mask=g_mask & (d0 < emb_dim), other=0.0)
-    v1 = tl.load(input_ptr + pid_b * stride_in_b + (d0 + 1) * stride_in_d,
+    v1 = tl.load(input_ptr + pid_b * stride_in_b + (d0 + 1) * stride_in_d,  # noqa: F821
                  mask=g_mask & ((d0 + 1) < emb_dim), other=0.0)
 
     r0 = cos_t * v0 - sin_t * v1
     r1 = sin_t * v0 + cos_t * v1
 
-    best_idx0 = tl.zeros_like(r0).to(tl.int32)
-    best_dist0 = tl.abs(r0 - tl.load(centroids_ptr))
-    for i in tl.static_range(1, n_levels):
-        c = tl.load(centroids_ptr + i)
-        dd = tl.abs(r0 - c)
+    best_idx0 = tl.zeros_like(r0).to(tl.int32)  # noqa: F821
+    best_dist0 = tl.abs(r0 - tl.load(centroids_ptr))  # noqa: F821
+    for i in tl.static_range(1, n_levels):  # noqa: F821
+        c = tl.load(centroids_ptr + i)  # noqa: F821
+        dd = tl.abs(r0 - c)  # noqa: F821
         mask = dd < best_dist0
-        best_dist0 = tl.where(mask, dd, best_dist0)
-        best_idx0 = tl.where(mask, i, best_idx0)
+        best_dist0 = tl.where(mask, dd, best_dist0)  # noqa: F821
+        best_idx0 = tl.where(mask, i, best_idx0)  # noqa: F821
 
-    best_idx1 = tl.zeros_like(r1).to(tl.int32)
-    best_dist1 = tl.abs(r1 - tl.load(centroids_ptr))
-    for i in tl.static_range(1, n_levels):
-        c = tl.load(centroids_ptr + i)
-        dd = tl.abs(r1 - c)
+    best_idx1 = tl.zeros_like(r1).to(tl.int32)  # noqa: F821
+    best_dist1 = tl.abs(r1 - tl.load(centroids_ptr))  # noqa: F821
+    for i in tl.static_range(1, n_levels):  # noqa: F821
+        c = tl.load(centroids_ptr + i)  # noqa: F821
+        dd = tl.abs(r1 - c)  # noqa: F821
         mask = dd < best_dist1
-        best_dist1 = tl.where(mask, dd, best_dist1)
-        best_idx1 = tl.where(mask, i, best_idx1)
+        best_dist1 = tl.where(mask, dd, best_dist1)  # noqa: F821
+        best_idx1 = tl.where(mask, i, best_idx1)  # noqa: F821
 
     packed_byte = (best_idx0 & 0x0F) | ((best_idx1 & 0x0F) << 4)
-    tl.store(packed_ptr + pid_b * stride_pack_b + g_offs * stride_pack_g,
-             packed_byte.to(tl.int8), mask=g_mask)
+    tl.store(packed_ptr + pid_b * stride_pack_b + g_offs * stride_pack_g,  # noqa: F821
+             packed_byte.to(tl.int8), mask=g_mask)  # noqa: F821
 
 
 @triton.jit
@@ -178,41 +178,41 @@ def _fused_planar4_unpack_dequant_kernel(
     packed_ptr, output_ptr,
     rot2_ptr, centroids_ptr, norms_ptr,
     batch_size, emb_dim,
-    n_groups: tl.constexpr,
+    n_groups: tl.constexpr,  # noqa: F821
     stride_pack_b, stride_pack_g,
     stride_out_b, stride_out_d,
-    BLOCK_G: tl.constexpr,
+    BLOCK_G: tl.constexpr,  # noqa: F821
 ):
     """Fused: unpack 4-bit → centroid lookup → inv Givens → rescale → fp16."""
-    pid_b = tl.program_id(0)
-    pid_g = tl.program_id(1)
+    pid_b = tl.program_id(0)  # noqa: F821
+    pid_g = tl.program_id(1)  # noqa: F821
 
-    g_offs = pid_g * BLOCK_G + tl.arange(0, BLOCK_G)
+    g_offs = pid_g * BLOCK_G + tl.arange(0, BLOCK_G)  # noqa: F821
     g_mask = g_offs < n_groups
 
-    packed = tl.load(packed_ptr + pid_b * stride_pack_b + g_offs * stride_pack_g,
-                     mask=g_mask, other=0).to(tl.int32)
+    packed = tl.load(packed_ptr + pid_b * stride_pack_b + g_offs * stride_pack_g,  # noqa: F821
+                     mask=g_mask, other=0).to(tl.int32)  # noqa: F821
     idx0 = packed & 0x0F
     idx1 = (packed >> 4) & 0x0F
 
-    q0 = tl.load(centroids_ptr + idx0, mask=g_mask, other=0.0)
-    q1 = tl.load(centroids_ptr + idx1, mask=g_mask, other=0.0)
+    q0 = tl.load(centroids_ptr + idx0, mask=g_mask, other=0.0)  # noqa: F821
+    q1 = tl.load(centroids_ptr + idx1, mask=g_mask, other=0.0)  # noqa: F821
 
-    cos_t = tl.load(rot2_ptr + g_offs * 2 + 0, mask=g_mask, other=1.0)
-    sin_t = tl.load(rot2_ptr + g_offs * 2 + 1, mask=g_mask, other=0.0)
+    cos_t = tl.load(rot2_ptr + g_offs * 2 + 0, mask=g_mask, other=1.0)  # noqa: F821
+    sin_t = tl.load(rot2_ptr + g_offs * 2 + 1, mask=g_mask, other=0.0)  # noqa: F821
 
     f0 = cos_t * q0 + sin_t * q1
     f1 = -sin_t * q0 + cos_t * q1
 
-    norm = tl.load(norms_ptr + pid_b).to(tl.float32)
+    norm = tl.load(norms_ptr + pid_b).to(tl.float32)  # noqa: F821
     f0 = f0 * norm
     f1 = f1 * norm
 
     d0 = g_offs * 2
-    tl.store(output_ptr + pid_b * stride_out_b + d0 * stride_out_d,
-             f0.to(tl.float16), mask=g_mask & (d0 < emb_dim))
-    tl.store(output_ptr + pid_b * stride_out_b + (d0 + 1) * stride_out_d,
-             f1.to(tl.float16), mask=g_mask & ((d0 + 1) < emb_dim))
+    tl.store(output_ptr + pid_b * stride_out_b + d0 * stride_out_d,  # noqa: F821
+             f0.to(tl.float16), mask=g_mask & (d0 < emb_dim))  # noqa: F821
+    tl.store(output_ptr + pid_b * stride_out_b + (d0 + 1) * stride_out_d,  # noqa: F821
+             f1.to(tl.float16), mask=g_mask & ((d0 + 1) < emb_dim))  # noqa: F821
 
 
 @triton.jit
@@ -220,34 +220,34 @@ def _fused_iso4_quant_pack_kernel(
     input_ptr, packed_ptr,
     qL_ptr, qR_ptr, centroids_ptr,
     batch_size, d_padded,
-    n_groups: tl.constexpr,
-    n_levels: tl.constexpr,
+    n_groups: tl.constexpr,  # noqa: F821
+    n_levels: tl.constexpr,  # noqa: F821
     stride_in_b, stride_in_d,
     stride_pack_b, stride_pack_e,
-    BLOCK_G: tl.constexpr,
+    BLOCK_G: tl.constexpr,  # noqa: F821
 ):
     """Fused: quaternion sandwich → nearest centroid → 4-bit pack (2 bytes/group)."""
-    pid_b = tl.program_id(0)
-    pid_g = tl.program_id(1)
+    pid_b = tl.program_id(0)  # noqa: F821
+    pid_g = tl.program_id(1)  # noqa: F821
 
-    g_offs = pid_g * BLOCK_G + tl.arange(0, BLOCK_G)
+    g_offs = pid_g * BLOCK_G + tl.arange(0, BLOCK_G)  # noqa: F821
     g_mask = g_offs < n_groups
 
     d0 = g_offs * 4
-    v0 = tl.load(input_ptr + pid_b * stride_in_b + d0 * stride_in_d, mask=g_mask, other=0.0)
-    v1 = tl.load(input_ptr + pid_b * stride_in_b + (d0 + 1) * stride_in_d, mask=g_mask, other=0.0)
-    v2 = tl.load(input_ptr + pid_b * stride_in_b + (d0 + 2) * stride_in_d, mask=g_mask, other=0.0)
-    v3 = tl.load(input_ptr + pid_b * stride_in_b + (d0 + 3) * stride_in_d, mask=g_mask, other=0.0)
+    v0 = tl.load(input_ptr + pid_b * stride_in_b + d0 * stride_in_d, mask=g_mask, other=0.0)  # noqa: F821
+    v1 = tl.load(input_ptr + pid_b * stride_in_b + (d0 + 1) * stride_in_d, mask=g_mask, other=0.0)  # noqa: F821
+    v2 = tl.load(input_ptr + pid_b * stride_in_b + (d0 + 2) * stride_in_d, mask=g_mask, other=0.0)  # noqa: F821
+    v3 = tl.load(input_ptr + pid_b * stride_in_b + (d0 + 3) * stride_in_d, mask=g_mask, other=0.0)  # noqa: F821
 
-    aw = tl.load(qL_ptr + g_offs * 4 + 0, mask=g_mask, other=1.0)
-    ax = tl.load(qL_ptr + g_offs * 4 + 1, mask=g_mask, other=0.0)
-    ay = tl.load(qL_ptr + g_offs * 4 + 2, mask=g_mask, other=0.0)
-    az = tl.load(qL_ptr + g_offs * 4 + 3, mask=g_mask, other=0.0)
+    aw = tl.load(qL_ptr + g_offs * 4 + 0, mask=g_mask, other=1.0)  # noqa: F821
+    ax = tl.load(qL_ptr + g_offs * 4 + 1, mask=g_mask, other=0.0)  # noqa: F821
+    ay = tl.load(qL_ptr + g_offs * 4 + 2, mask=g_mask, other=0.0)  # noqa: F821
+    az = tl.load(qL_ptr + g_offs * 4 + 3, mask=g_mask, other=0.0)  # noqa: F821
 
-    bw = tl.load(qR_ptr + g_offs * 4 + 0, mask=g_mask, other=1.0)
-    bx = tl.load(qR_ptr + g_offs * 4 + 1, mask=g_mask, other=0.0)
-    by = tl.load(qR_ptr + g_offs * 4 + 2, mask=g_mask, other=0.0)
-    bz = tl.load(qR_ptr + g_offs * 4 + 3, mask=g_mask, other=0.0)
+    bw = tl.load(qR_ptr + g_offs * 4 + 0, mask=g_mask, other=1.0)  # noqa: F821
+    bx = tl.load(qR_ptr + g_offs * 4 + 1, mask=g_mask, other=0.0)  # noqa: F821
+    by = tl.load(qR_ptr + g_offs * 4 + 2, mask=g_mask, other=0.0)  # noqa: F821
+    bz = tl.load(qR_ptr + g_offs * 4 + 3, mask=g_mask, other=0.0)  # noqa: F821
 
     # Hamilton product: temp = q_L * v (treating v as pure quaternion)
     tw = aw * v0 - ax * v1 - ay * v2 - az * v3
@@ -262,46 +262,46 @@ def _fused_iso4_quant_pack_kernel(
     rz = -tw * bz - tx * by + ty * bx + tz * bw
 
     # Nearest centroid × 4 components
-    best_iw = tl.zeros_like(rw).to(tl.int32)
-    best_dw = tl.abs(rw - tl.load(centroids_ptr))
-    for i in tl.static_range(1, n_levels):
-        c = tl.load(centroids_ptr + i)
-        m = tl.abs(rw - c) < best_dw
-        best_dw = tl.where(m, tl.abs(rw - c), best_dw)
-        best_iw = tl.where(m, i, best_iw)
+    best_iw = tl.zeros_like(rw).to(tl.int32)  # noqa: F821
+    best_dw = tl.abs(rw - tl.load(centroids_ptr))  # noqa: F821
+    for i in tl.static_range(1, n_levels):  # noqa: F821
+        c = tl.load(centroids_ptr + i)  # noqa: F821
+        m = tl.abs(rw - c) < best_dw  # noqa: F821
+        best_dw = tl.where(m, tl.abs(rw - c), best_dw)  # noqa: F821
+        best_iw = tl.where(m, i, best_iw)  # noqa: F821
 
-    best_ix = tl.zeros_like(rx).to(tl.int32)
-    best_dx = tl.abs(rx - tl.load(centroids_ptr))
-    for i in tl.static_range(1, n_levels):
-        c = tl.load(centroids_ptr + i)
-        m = tl.abs(rx - c) < best_dx
-        best_dx = tl.where(m, tl.abs(rx - c), best_dx)
-        best_ix = tl.where(m, i, best_ix)
+    best_ix = tl.zeros_like(rx).to(tl.int32)  # noqa: F821
+    best_dx = tl.abs(rx - tl.load(centroids_ptr))  # noqa: F821
+    for i in tl.static_range(1, n_levels):  # noqa: F821
+        c = tl.load(centroids_ptr + i)  # noqa: F821
+        m = tl.abs(rx - c) < best_dx  # noqa: F821
+        best_dx = tl.where(m, tl.abs(rx - c), best_dx)  # noqa: F821
+        best_ix = tl.where(m, i, best_ix)  # noqa: F821
 
-    best_iy = tl.zeros_like(ry).to(tl.int32)
-    best_dy = tl.abs(ry - tl.load(centroids_ptr))
-    for i in tl.static_range(1, n_levels):
-        c = tl.load(centroids_ptr + i)
-        m = tl.abs(ry - c) < best_dy
-        best_dy = tl.where(m, tl.abs(ry - c), best_dy)
-        best_iy = tl.where(m, i, best_iy)
+    best_iy = tl.zeros_like(ry).to(tl.int32)  # noqa: F821
+    best_dy = tl.abs(ry - tl.load(centroids_ptr))  # noqa: F821
+    for i in tl.static_range(1, n_levels):  # noqa: F821
+        c = tl.load(centroids_ptr + i)  # noqa: F821
+        m = tl.abs(ry - c) < best_dy  # noqa: F821
+        best_dy = tl.where(m, tl.abs(ry - c), best_dy)  # noqa: F821
+        best_iy = tl.where(m, i, best_iy)  # noqa: F821
 
-    best_iz = tl.zeros_like(rz).to(tl.int32)
-    best_dz = tl.abs(rz - tl.load(centroids_ptr))
-    for i in tl.static_range(1, n_levels):
-        c = tl.load(centroids_ptr + i)
-        m = tl.abs(rz - c) < best_dz
-        best_dz = tl.where(m, tl.abs(rz - c), best_dz)
-        best_iz = tl.where(m, i, best_iz)
+    best_iz = tl.zeros_like(rz).to(tl.int32)  # noqa: F821
+    best_dz = tl.abs(rz - tl.load(centroids_ptr))  # noqa: F821
+    for i in tl.static_range(1, n_levels):  # noqa: F821
+        c = tl.load(centroids_ptr + i)  # noqa: F821
+        m = tl.abs(rz - c) < best_dz  # noqa: F821
+        best_dz = tl.where(m, tl.abs(rz - c), best_dz)  # noqa: F821
+        best_iz = tl.where(m, i, best_iz)  # noqa: F821
 
     # Pack: 4 indices → 2 bytes (byte0 = iw|ix<<4, byte1 = iy|iz<<4)
     byte0 = (best_iw & 0x0F) | ((best_ix & 0x0F) << 4)
     byte1 = (best_iy & 0x0F) | ((best_iz & 0x0F) << 4)
 
-    tl.store(packed_ptr + pid_b * stride_pack_b + (g_offs * 2) * stride_pack_e,
-             byte0.to(tl.int8), mask=g_mask)
-    tl.store(packed_ptr + pid_b * stride_pack_b + (g_offs * 2 + 1) * stride_pack_e,
-             byte1.to(tl.int8), mask=g_mask)
+    tl.store(packed_ptr + pid_b * stride_pack_b + (g_offs * 2) * stride_pack_e,  # noqa: F821
+             byte0.to(tl.int8), mask=g_mask)  # noqa: F821
+    tl.store(packed_ptr + pid_b * stride_pack_b + (g_offs * 2 + 1) * stride_pack_e,  # noqa: F821
+             byte1.to(tl.int8), mask=g_mask)  # noqa: F821
 
 
 @triton.jit
@@ -309,42 +309,42 @@ def _fused_iso4_unpack_dequant_kernel(
     packed_ptr, output_ptr,
     qL_ptr, qR_ptr, centroids_ptr, norms_ptr,
     batch_size, d_padded, head_dim,
-    n_groups: tl.constexpr,
+    n_groups: tl.constexpr,  # noqa: F821
     stride_pack_b, stride_pack_e,
     stride_out_b, stride_out_d,
-    BLOCK_G: tl.constexpr,
+    BLOCK_G: tl.constexpr,  # noqa: F821
 ):
     """Fused: unpack 4-bit → centroid → inv quat sandwich → rescale → fp16."""
-    pid_b = tl.program_id(0)
-    pid_g = tl.program_id(1)
+    pid_b = tl.program_id(0)  # noqa: F821
+    pid_g = tl.program_id(1)  # noqa: F821
 
-    g_offs = pid_g * BLOCK_G + tl.arange(0, BLOCK_G)
+    g_offs = pid_g * BLOCK_G + tl.arange(0, BLOCK_G)  # noqa: F821
     g_mask = g_offs < n_groups
 
-    byte0 = tl.load(packed_ptr + pid_b * stride_pack_b + (g_offs * 2) * stride_pack_e,
-                    mask=g_mask, other=0).to(tl.int32)
-    byte1 = tl.load(packed_ptr + pid_b * stride_pack_b + (g_offs * 2 + 1) * stride_pack_e,
-                    mask=g_mask, other=0).to(tl.int32)
+    byte0 = tl.load(packed_ptr + pid_b * stride_pack_b + (g_offs * 2) * stride_pack_e,  # noqa: F821
+                    mask=g_mask, other=0).to(tl.int32)  # noqa: F821
+    byte1 = tl.load(packed_ptr + pid_b * stride_pack_b + (g_offs * 2 + 1) * stride_pack_e,  # noqa: F821
+                    mask=g_mask, other=0).to(tl.int32)  # noqa: F821
 
     iw = byte0 & 0x0F
     ix = (byte0 >> 4) & 0x0F
     iy = byte1 & 0x0F
     iz = (byte1 >> 4) & 0x0F
 
-    v0 = tl.load(centroids_ptr + iw, mask=g_mask, other=0.0)
-    v1 = tl.load(centroids_ptr + ix, mask=g_mask, other=0.0)
-    v2 = tl.load(centroids_ptr + iy, mask=g_mask, other=0.0)
-    v3 = tl.load(centroids_ptr + iz, mask=g_mask, other=0.0)
+    v0 = tl.load(centroids_ptr + iw, mask=g_mask, other=0.0)  # noqa: F821
+    v1 = tl.load(centroids_ptr + ix, mask=g_mask, other=0.0)  # noqa: F821
+    v2 = tl.load(centroids_ptr + iy, mask=g_mask, other=0.0)  # noqa: F821
+    v3 = tl.load(centroids_ptr + iz, mask=g_mask, other=0.0)  # noqa: F821
 
-    aw = tl.load(qL_ptr + g_offs * 4 + 0, mask=g_mask, other=1.0)
-    ax = tl.load(qL_ptr + g_offs * 4 + 1, mask=g_mask, other=0.0)
-    ay = tl.load(qL_ptr + g_offs * 4 + 2, mask=g_mask, other=0.0)
-    az = tl.load(qL_ptr + g_offs * 4 + 3, mask=g_mask, other=0.0)
+    aw = tl.load(qL_ptr + g_offs * 4 + 0, mask=g_mask, other=1.0)  # noqa: F821
+    ax = tl.load(qL_ptr + g_offs * 4 + 1, mask=g_mask, other=0.0)  # noqa: F821
+    ay = tl.load(qL_ptr + g_offs * 4 + 2, mask=g_mask, other=0.0)  # noqa: F821
+    az = tl.load(qL_ptr + g_offs * 4 + 3, mask=g_mask, other=0.0)  # noqa: F821
 
-    bw = tl.load(qR_ptr + g_offs * 4 + 0, mask=g_mask, other=1.0)
-    bx = tl.load(qR_ptr + g_offs * 4 + 1, mask=g_mask, other=0.0)
-    by = tl.load(qR_ptr + g_offs * 4 + 2, mask=g_mask, other=0.0)
-    bz = tl.load(qR_ptr + g_offs * 4 + 3, mask=g_mask, other=0.0)
+    bw = tl.load(qR_ptr + g_offs * 4 + 0, mask=g_mask, other=1.0)  # noqa: F821
+    bx = tl.load(qR_ptr + g_offs * 4 + 1, mask=g_mask, other=0.0)  # noqa: F821
+    by = tl.load(qR_ptr + g_offs * 4 + 2, mask=g_mask, other=0.0)  # noqa: F821
+    bz = tl.load(qR_ptr + g_offs * 4 + 3, mask=g_mask, other=0.0)  # noqa: F821
 
     # Inverse sandwich: conj(q_L) * v * q_R
     tw = aw * v0 + ax * v1 + ay * v2 + az * v3
@@ -357,21 +357,21 @@ def _fused_iso4_unpack_dequant_kernel(
     ry = tw * by - tx * bz + ty * bw + tz * bx
     rz = tw * bz + tx * by - ty * bx + tz * bw
 
-    norm = tl.load(norms_ptr + pid_b).to(tl.float32)
+    norm = tl.load(norms_ptr + pid_b).to(tl.float32)  # noqa: F821
     rw = rw * norm
     rx = rx * norm
     ry = ry * norm
     rz = rz * norm
 
     d0 = g_offs * 4
-    tl.store(output_ptr + pid_b * stride_out_b + d0 * stride_out_d,
-             rw.to(tl.float16), mask=g_mask & (d0 < head_dim))
-    tl.store(output_ptr + pid_b * stride_out_b + (d0 + 1) * stride_out_d,
-             rx.to(tl.float16), mask=g_mask & ((d0 + 1) < head_dim))
-    tl.store(output_ptr + pid_b * stride_out_b + (d0 + 2) * stride_out_d,
-             ry.to(tl.float16), mask=g_mask & ((d0 + 2) < head_dim))
-    tl.store(output_ptr + pid_b * stride_out_b + (d0 + 3) * stride_out_d,
-             rz.to(tl.float16), mask=g_mask & ((d0 + 3) < head_dim))
+    tl.store(output_ptr + pid_b * stride_out_b + d0 * stride_out_d,  # noqa: F821
+             rw.to(tl.float16), mask=g_mask & (d0 < head_dim))  # noqa: F821
+    tl.store(output_ptr + pid_b * stride_out_b + (d0 + 1) * stride_out_d,  # noqa: F821
+             rx.to(tl.float16), mask=g_mask & ((d0 + 1) < head_dim))  # noqa: F821
+    tl.store(output_ptr + pid_b * stride_out_b + (d0 + 2) * stride_out_d,  # noqa: F821
+             ry.to(tl.float16), mask=g_mask & ((d0 + 2) < head_dim))  # noqa: F821
+    tl.store(output_ptr + pid_b * stride_out_b + (d0 + 3) * stride_out_d,  # noqa: F821
+             rz.to(tl.float16), mask=g_mask & ((d0 + 3) < head_dim))  # noqa: F821
 
 
 # ---------------------------------------------------------------------------
@@ -501,11 +501,11 @@ KERNELS = [
 def get_target(target_name: str, arch: str):
     """Build a Triton backend target object."""
     if target_name == "hip":
-        from triton.backends.amd.compiler import GPUTarget
+        from triton.backends.amd.compiler import GPUTarget  # type: ignore
         warp_size = 64
         return GPUTarget("hip", arch, warp_size)
     elif target_name == "cuda":
-        from triton.backends.nvidia.compiler import GPUTarget
+        from triton.backends.nvidia.compiler import GPUTarget  # type: ignore
         warp_size = 32
         return GPUTarget("cuda", arch, warp_size)
     else:
@@ -575,7 +575,7 @@ def main():
     if args.arch is None:
         args.arch = "gfx1031" if args.target == "hip" else "sm_80"
 
-    print(f"RotorQuant Triton AOT compiler")
+    print("RotorQuant Triton AOT compiler")
     print(f"  target : {args.target}")
     print(f"  arch   : {args.arch}")
     print(f"  output : {args.output_dir}")

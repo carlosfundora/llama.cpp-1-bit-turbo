@@ -65,7 +65,7 @@ static inline int hsum_i32_4(const __m128i a) {
     return _mm_cvtsi128_si32(_mm_add_epi32(sum64, hi32));
 }
 
-#if defined(__AVX2__) || defined(__AVX512F__)
+#if defined(__AVX2__) || defined(__AVX__) || defined(__AVX512F__)
 static inline __m256i mul_add_epi8(const __m256i x, const __m256i y) {
     const __m256i ax = _mm256_sign_epi8(x, x);
     const __m256i sy = _mm256_sign_epi8(y, x);
@@ -294,7 +294,7 @@ void quantize_row_q8_0(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, i
 
     block_q8_0 * GGML_RESTRICT y = vy;
 
-#if defined(__AVX2__) || defined(__AVX__)
+#if defined(__AVX2__) || defined(__AVX__) || defined(__AVX__)
     for (int i = 0; i < nb; i++) {
         // Load elements into 4 AVX vectors
         __m256 v0 = _mm256_loadu_ps( x );
@@ -339,7 +339,7 @@ void quantize_row_q8_0(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, i
         __m256i i2 = _mm256_cvtps_epi32( v2 );
         __m256i i3 = _mm256_cvtps_epi32( v3 );
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
         // Convert int32 to int16
         i0 = _mm256_packs_epi32( i0, i1 );	// 0, 1, 2, 3,  8, 9, 10, 11,  4, 5, 6, 7, 12, 13, 14, 15
         i2 = _mm256_packs_epi32( i2, i3 );	// 16, 17, 18, 19,  24, 25, 26, 27,  20, 21, 22, 23, 28, 29, 30, 31
@@ -390,7 +390,7 @@ void quantize_row_q8_1(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, i
     const int nb = k / QK8_1;
 
     block_q8_1 * GGML_RESTRICT y = vy;
-#if defined(__AVX2__) || defined(__AVX__)
+#if defined(__AVX2__) || defined(__AVX__) || defined(__AVX__)
     for (int i = 0; i < nb; i++) {
         // Load elements into 4 AVX vectors
         __m256 v0 = _mm256_loadu_ps( x );
@@ -435,7 +435,7 @@ void quantize_row_q8_1(const float * GGML_RESTRICT x, void * GGML_RESTRICT vy, i
         __m256i i2 = _mm256_cvtps_epi32( v2 );
         __m256i i3 = _mm256_cvtps_epi32( v3 );
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
         // Compute the sum of the quants and set y[i].s
         y[i].s = GGML_CPU_FP32_TO_FP16(d * hsum_i32_8(_mm256_add_epi32(_mm256_add_epi32(i0, i1), _mm256_add_epi32(i2, i3))));
 
@@ -555,9 +555,9 @@ void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
     const block_q8_0 * GGML_RESTRICT y = vy;
 
     int ib = 0;
-    float sumf = 0;
+    float sumf = 0.0f;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
     // Initialize accumulator with zeros
     __m256 acc = _mm256_setzero_ps();
 
@@ -568,10 +568,10 @@ void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
 
         // Load Q1_0 bits (4 bytes = 32 bits)
         const uint32_t qbits32 = *(const uint32_t *)x[ib].qs;
-        
+
         // Load Q8_0 values (32 bytes)
         const __m256i qy = _mm256_loadu_si256((const __m256i *)y[ib].qs);
-        
+
         // Expand 32 bits to 32 bytes (each bit becomes ±1)
         // We need to place the right byte in each 8-byte group and mask the right bit
         __m256i qx;
@@ -584,14 +584,14 @@ void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
                 1, 1, 1, 1, 1, 1, 1, 1,  // byte 1 (bits 8-15) replicated
                 0, 0, 0, 0, 0, 0, 0, 0   // byte 0 (bits 0-7) replicated
             );
-            
+
             // Broadcast the 4 bytes across the 128-bit lanes
             const __m128i qbits_128 = _mm_set1_epi32(qbits32);
             const __m256i qbits_256 = _mm256_broadcastsi128_si256(qbits_128);
-            
+
             // Shuffle to replicate bytes
             const __m256i qbits_shuffled = _mm256_shuffle_epi8(qbits_256, shuffle_mask);
-            
+
             // Create bit masks for each position within a byte
             const __m256i bit_mask = _mm256_set_epi8(
                 (char)0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01,  // masks for byte 3
@@ -599,12 +599,12 @@ void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
                 (char)0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01,  // masks for byte 1
                 (char)0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01   // masks for byte 0
             );
-            
+
             // Test each bit: AND with mask, compare to mask
             // Result is 0xFF if bit is set, 0x00 if not
             const __m256i bit_test = _mm256_and_si256(qbits_shuffled, bit_mask);
             const __m256i is_set = _mm256_cmpeq_epi8(bit_test, bit_mask);
-            
+
             // Convert 0xFF -> +1, 0x00 -> -1
             // is_set is 0xFF (all bits set) if bit is 1, or 0x00 if bit is 0
             // We want: +1 if bit is 1, -1 if bit is 0
@@ -614,16 +614,16 @@ void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
             const __m256i bit_doubled = _mm256_add_epi8(bit_value, bit_value);  // 0x02 or 0x00
             qx = _mm256_sub_epi8(bit_doubled, ones);  // 0x01 or 0xFF (-1)
         }
-        
+
         // Multiply and accumulate using the same pattern as Q4_0
         const __m256 q = mul_sum_i8_pairs_float(qx, qy);
-        
+
         // Multiply q with scale and accumulate
         acc = _mm256_fmadd_ps(d, q, acc);
     }
 
     sumf = hsum_float_8(acc);
-    
+
 #endif
     // Fallback scalar loop for remaining blocks
     for (; ib < nb; ++ib) {
@@ -634,7 +634,7 @@ void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
         for (int byte_idx = 0; byte_idx < QK1_0/8; ++byte_idx) {
             const uint8_t bits8 = qbits[byte_idx];
             const int base_idx = byte_idx * 8;
-            
+
             // Process each bit
             for (int bit_idx = 0; bit_idx < 8; ++bit_idx) {
                 const int xi = (bits8 & (1U << bit_idx)) ? 1 : -1;
@@ -642,7 +642,7 @@ void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
             }
         }
 
-        sumf += sumi * GGML_CPU_FP16_TO_FP32(x[ib].d) * GGML_CPU_FP16_TO_FP32(y[ib].d);
+        sumf += (float)sumi * GGML_CPU_FP16_TO_FP32(x[ib].d) * GGML_CPU_FP16_TO_FP32(y[ib].d);
     }
 
     *s = sumf;
@@ -662,38 +662,38 @@ void ggml_vec_dot_q1_0_g128_q8_0(int n, float * GGML_RESTRICT s, size_t bs, cons
     const block_q1_0_g128 * GGML_RESTRICT x = vx;
     const block_q8_0 * GGML_RESTRICT y = vy;
 
-    float sumf = 0;
+    float sumf = 0.0f;
 
     // Each Q1_0_g128 block has 128 elements
     // Each Q8_0 block has 32 elements
     // So we need 4 Q8_0 blocks per Q1_0_g128 block
     for (int ib = 0; ib < nb; ++ib) {
         const float d0 = GGML_CPU_FP16_TO_FP32(x[ib].d);
-        
+
         int sumi = 0;
-        
+
         // Process 4 Q8_0 blocks (4 * 32 = 128 elements)
         for (int k = 0; k < 4; k++) {
             const float d1 = GGML_CPU_FP16_TO_FP32(y[ib*4 + k].d);
-            
+
             int sumi_block = 0;
-            
+
             for (int j = 0; j < QK8_0; j++) {
                 const int bit_index = k * QK8_0 + j;
                 const int byte_index = bit_index / 8;
                 const int bit_offset = bit_index % 8;
-                
+
                 // Extract bit: 1 = +1, 0 = -1
                 const int xi = ((x[ib].qs[byte_index] >> bit_offset) & 1) ? 1 : -1;
                 const int yi = y[ib*4 + k].qs[j];
-                
+
                 sumi_block += xi * yi;
             }
-            
-            sumi += d1 * sumi_block;
+
+            sumi += d1 * (float)sumi_block;
         }
-        
-        sumf += d0 * sumi;
+
+        sumf += d0 * (float)sumi;
     }
 
     *s = sumf;
@@ -714,9 +714,9 @@ void ggml_vec_dot_q4_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
     const block_q8_0 * GGML_RESTRICT y = vy;
 
     int ib = 0;
-    float sumf = 0;
+    float sumf = 0.0f;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
     // Initialize accumulator with zeros
     __m256 acc = _mm256_setzero_ps();
 
@@ -851,7 +851,7 @@ void ggml_vec_dot_q4_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
         }
 
         int sumi = sumi0 + sumi1;
-        sumf += sumi*GGML_CPU_FP16_TO_FP32(x[ib].d)*GGML_CPU_FP16_TO_FP32(y[ib].d);
+        sumf += (float)sumi*GGML_CPU_FP16_TO_FP32(x[ib].d)*GGML_CPU_FP16_TO_FP32(y[ib].d);
     }
 
     *s = sumf;
@@ -873,7 +873,7 @@ void ggml_vec_dot_q4_1_q8_1(int n, float * GGML_RESTRICT s, size_t bs, const voi
 
     int ib = 0;
 
-#if defined(__AVX2__) || defined(__AVX__)
+#if defined(__AVX2__) || defined(__AVX__) || defined(__AVX__)
     // Initialize accumulator with zeros
     __m256 acc = _mm256_setzero_ps();
 
@@ -899,7 +899,7 @@ void ggml_vec_dot_q4_1_q8_1(int n, float * GGML_RESTRICT s, size_t bs, const voi
         const __m256 xy = mul_sum_us8_pairs_float(qx, qy);
 
         // Accumulate d0*d1*x*y
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
         acc = _mm256_fmadd_ps( d0d1, xy, acc );
 #else
         acc = _mm256_add_ps( _mm256_mul_ps( d0d1, xy ), acc );
@@ -931,7 +931,7 @@ void ggml_vec_dot_mxfp4_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const vo
     const int nb = n / QK_MXFP4;
 
     int ib = 0;
-    float sumf = 0;
+    float sumf = 0.0f;
 
 #if defined __AVX2__
 
@@ -997,7 +997,7 @@ void ggml_vec_dot_mxfp4_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const vo
             sumi1 += y[ib].qs[j +          0] * kvalues_mxfp4[x[ib].qs[j] & 0xf];
             sumi2 += y[ib].qs[j + QK_MXFP4/2] * kvalues_mxfp4[x[ib].qs[j] >>  4];
         }
-        sumf += d * (sumi1 + sumi2);
+        sumf += d * (float)(sumi1 + sumi2);
     }
     *s = sumf;
 }
@@ -1019,7 +1019,7 @@ void ggml_vec_dot_q5_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
     const block_q5_0 * GGML_RESTRICT x = vx;
     const block_q8_0 * GGML_RESTRICT y = vy;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
     // Initialize accumulator with zeros
     __m256 acc = _mm256_setzero_ps();
 
@@ -1099,7 +1099,7 @@ void ggml_vec_dot_q5_1_q8_1(int n, float * GGML_RESTRICT s, size_t bs, const voi
     const block_q5_1 * GGML_RESTRICT x = vx;
     const block_q8_1 * GGML_RESTRICT y = vy;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
     // Initialize accumulator with zeros
     __m256 acc = _mm256_setzero_ps();
 
@@ -1183,9 +1183,9 @@ void ggml_vec_dot_q8_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
     const block_q8_0 * GGML_RESTRICT y = vy;
 
     int ib = 0;
-    float sumf = 0;
+    float sumf = 0.0f;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
     // Initialize accumulator with zeros
     __m256 acc = _mm256_setzero_ps();
 
@@ -1230,7 +1230,7 @@ void ggml_vec_dot_q8_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
             sumi += x[ib].qs[j]*y[ib].qs[j];
         }
 
-        sumf += sumi*(GGML_CPU_FP16_TO_FP32(x[ib].d)*GGML_CPU_FP16_TO_FP32(y[ib].d));
+        sumf += (float)sumi*(GGML_CPU_FP16_TO_FP32(x[ib].d)*GGML_CPU_FP16_TO_FP32(y[ib].d));
     }
 
     *s = sumf;
@@ -1248,7 +1248,7 @@ void ggml_vec_dot_tq1_0_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const vo
 
     const int nb = n / QK_K;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
     __m256 sumf = _mm256_setzero_ps();
 
     for (int i = 0; i < nb; ++i) {
@@ -1380,7 +1380,7 @@ void ggml_vec_dot_tq2_0_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const vo
 
     const int nb = n / QK_K;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
     __m256 sumf = _mm256_setzero_ps();
 
     for (int i = 0; i < nb; ++i) {
@@ -2541,7 +2541,7 @@ void ggml_vec_dot_iq2_xxs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const 
 
     const int nb = n / QK_K;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
 
     const uint64_t * signs64 = (const uint64_t *)keven_signs_q2xs;
 
@@ -2659,7 +2659,7 @@ void ggml_vec_dot_iq2_xs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const v
 
     const int nb = n / QK_K;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
 
     const __m256i mone = _mm256_set1_epi8(1);
     static const char block_sign_shuffle_mask_1[32] = {
@@ -2956,7 +2956,7 @@ void ggml_vec_dot_iq2_s_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const vo
 
     const int nb = n / QK_K;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
 
    static const uint8_t k_mask1[32] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
                                        0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03
@@ -3141,7 +3141,7 @@ void ggml_vec_dot_iq3_xxs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const 
 
     const int nb = n / QK_K;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
 
     const uint64_t * signs64 = (const uint64_t *)keven_signs_q2xs;
 
@@ -3265,7 +3265,7 @@ void ggml_vec_dot_iq3_s_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const vo
 
     const int nb = n / QK_K;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__AVX__)
 
    static const uint8_t k_mask1[32] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
                                        0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03
@@ -3803,7 +3803,7 @@ void ggml_vec_dot_iq4_nl_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const v
     const int nb = n / QK4_NL;
 
     int ib = 0;
-    float sumf = 0;
+    float sumf = 0.0f;
 
 #if defined __AVX2__
 
@@ -3867,7 +3867,7 @@ void ggml_vec_dot_iq4_nl_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const v
             sumi1 += y[ib].qs[j+       0] * kvalues_iq4nl[x[ib].qs[j] & 0xf];
             sumi2 += y[ib].qs[j+QK4_NL/2] * kvalues_iq4nl[x[ib].qs[j] >>  4];
         }
-        sumf += d * (sumi1 + sumi2);
+        sumf += d * (float)(sumi1 + sumi2);
     }
     *s = sumf;
 }

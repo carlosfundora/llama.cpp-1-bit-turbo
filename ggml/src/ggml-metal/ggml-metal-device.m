@@ -793,7 +793,7 @@ ggml_metal_device_t ggml_metal_device_init(int device) {
 
             dev->props.max_buffer_size            = dev->mtl_device.maxBufferLength;
             dev->props.max_theadgroup_memory_size = dev->mtl_device.maxThreadgroupMemoryLength;
-            if (@available(macOS 10.12, iOS 16.0, *)) {
+            if (@available(macOS 10.12, iOS 16.0, tvOS 16.0, *)) {
                 dev->props.max_working_set_size   = dev->mtl_device.recommendedMaxWorkingSetSize;
             } else {
                 dev->props.max_working_set_size   = dev->mtl_device.maxBufferLength;
@@ -851,7 +851,7 @@ ggml_metal_device_t ggml_metal_device_init(int device) {
             GGML_LOG_INFO("%s: use shared buffers    = %s\n", __func__, dev->props.use_shared_buffers      ? "true" : "false");
 
 #if TARGET_OS_OSX || (TARGET_OS_IOS && __clang_major__ >= 15)
-            if (@available(macOS 10.12, iOS 16.0, *)) {
+            if (@available(macOS 10.12, iOS 16.0, tvOS 16.0, *)) {
                 GGML_LOG_INFO("%s: recommendedMaxWorkingSetSize  = %8.2f MB\n", __func__, dev->props.max_working_set_size / 1e6);
             }
 #endif
@@ -984,7 +984,7 @@ void ggml_metal_device_event_synchronize(ggml_metal_device_t dev, ggml_metal_eve
 }
 
 void ggml_metal_device_get_memory(ggml_metal_device_t dev, size_t * free, size_t * total) {
-    if (@available(macOS 10.12, iOS 16.0, *)) {
+    if (@available(macOS 10.12, iOS 16.0, tvOS 16.0, *)) {
         *total = dev->mtl_device.recommendedMaxWorkingSetSize;
         *free  = *total - dev->mtl_device.currentAllocatedSize;
     } else {
@@ -1304,7 +1304,7 @@ struct ggml_metal_buffer {
 static void ggml_metal_log_allocated_size(id<MTLDevice> device, size_t size_aligned) {
 #ifndef GGML_METAL_NDEBUG
 #if TARGET_OS_OSX || (TARGET_OS_IOS && __clang_major__ >= 15)
-    if (@available(macOS 10.12, iOS 16.0, *)) {
+    if (@available(macOS 10.12, iOS 16.0, tvOS 16.0, *)) {
         GGML_LOG_DEBUG("%s: allocated buffer, size = %8.2f MiB, (%8.2f / %8.2f)\n",
                 __func__,
                 size_aligned / 1024.0 / 1024.0,
