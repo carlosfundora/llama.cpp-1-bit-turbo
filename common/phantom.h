@@ -99,7 +99,7 @@ struct phantom_bloom {
     float occupancy() const {
         size_t set = 0;
         for (auto w : bits) {
-            set += __builtin_popcountll(w);
+            set += __popcnt64(w);
         }
         return (float)set / (float)n_bits;
     }

@@ -184,9 +184,9 @@ static void ggml_backend_blas_out_prod(ggml_backend_blas_context * ctx, struct g
     // src1->data already contains a transposed version, so sgemm mustn't
     // transpose it further.
 
-    int n = src0->ne[0];
-    int k = src0->ne[1];
-    int m = src1->ne[0];
+    int n = (int)src0->ne[0];
+    int k = (int)src0->ne[1];
+    int m = (int)src1->ne[0];
 
     CBLAS_TRANSPOSE transposeA;
     int lda;
@@ -203,7 +203,17 @@ static void ggml_backend_blas_out_prod(ggml_backend_blas_context * ctx, struct g
     float * b = (float *) ((char *) src0->data);
     float * c = (float *) ((char *) dst->data);
 
-    cblas_sgemm(CblasRowMajor, transposeA, CblasNoTrans, m, n, k, 1.0, a, lda, b, n, 0.0, c, n);
+
+#if defined(__APPLE__)
+    if (__builtin_available(macOS 13.3, iOS 16.4, tvOS 16.4, watchOS 9.4, *)) {
+#endif
+        cblas_sgemm(CblasRowMajor, transposeA, CblasNoTrans, m, n, k, 1.0, a, lda, b, n, 0.0, c, n);
+#if defined(__APPLE__)
+    } else {
+        ggml_abort("cblas_sgemm not available on this platform");
+    }
+#endif
+
 
     GGML_UNUSED(ctx);
 }
