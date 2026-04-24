@@ -201,6 +201,12 @@ diff_split calculate_diff_split(const std::string & left, const std::string & ri
         result.prefix = left;
         result.suffix = "";
         result.right  = right.substr(left.size());
+    } else if (result.right.empty() && !result.left.empty() &&
+            right.size() <= left.size() &&
+            left.substr(0, right.size()) == right) {
+        result.prefix = right;
+        result.suffix = "";
+        result.left   = left.substr(right.size());
     }
 
     return result;
