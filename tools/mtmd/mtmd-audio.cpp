@@ -295,7 +295,7 @@ static void log_mel_spectrogram_worker_thread(int                        ith,
 
         // fill the rest with zeros
         if (n_samples - offset < frame_size) {
-            std::fill(fft_in.begin() + (n_samples - offset), fft_in.end(), 0.0);
+            std::fill(fft_in.begin() + (n_samples - offset), fft_in.end(), 0.0f);
         }
 
         // FFT
@@ -373,7 +373,7 @@ static bool log_mel_spectrogram(
         samples_padded.resize(n_samples + stage_1_pad + stage_2_pad * 2);
         std::copy(samples, samples + n_samples, samples_padded.begin() + stage_2_pad);
         // pad 30 seconds of zeros at the end of audio (480,000 samples) + reflective pad 200 samples at the end of audio
-        std::fill(samples_padded.begin() + n_samples + stage_2_pad, samples_padded.begin() + n_samples + stage_1_pad + 2 * stage_2_pad, 0);
+        std::fill(samples_padded.begin() + n_samples + stage_2_pad, samples_padded.begin() + n_samples + stage_1_pad + 2 * stage_2_pad, 0.0f);
         // reflective pad 200 samples at the beginning of audio
         if (n_samples < stage_2_pad + 1) {
             // TODO: Handle short audio differently or return error
