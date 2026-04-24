@@ -60,34 +60,38 @@ class ReaderField(NamedTuple):
             main_type = self.types[0]
 
             if main_type == GGUFValueType.ARRAY:
-                sub_type = self.types[-1]
-
-                if sub_type == GGUFValueType.STRING:
-                    indices = self.data[index_or_slice]
-
-                    if isinstance(index_or_slice, int):
-                        return to_string(self.parts[indices]) # type: ignore
+                # Optimization for 1D arrays
+                if len(self.types) == 2:
+                    if self.types[1] == GGUFValueType.STRING:
+                        indices = self.data[index_or_slice]
+                        if isinstance(index_or_slice, int):
+                            return to_string(self.parts[indices])  # type: ignore
+                        else:
+                            return [to_string(self.parts[idx]) for idx in indices]  # type: ignore
                     else:
-                        return [to_string(self.parts[idx]) for idx in indices] # type: ignore
-                else:
-                    # FIXME: When/if _get_field_parts() support multi-dimensional arrays, this must do so too
+                        if isinstance(index_or_slice, int):
+                            return self.parts[self.data[index_or_slice]].tolist()[0]
+                        else:
+                            return [pv for idx in self.data[index_or_slice] for pv in self.parts[idx].tolist()]
 
-                    # Check if it's unsafe to perform slice optimization on data
-                    # if any(True for idx in self.data if len(self.parts[idx]) != 1):
-                    #     optim_slice = slice(None)
-                    # else:
-                    #     optim_slice = index_or_slice
-                    #     index_or_slice = slice(None)
-
-                    # if isinstance(optim_slice, int):
-                    #     return self.parts[self.data[optim_slice]].tolist()[0]
-                    # else:
-                    #     return [pv for idx in self.data[optim_slice] for pv in self.parts[idx].tolist()][index_or_slice]
-
-                    if isinstance(index_or_slice, int):
-                        return self.parts[self.data[index_or_slice]].tolist()[0]
+                # Multi-dimensional arrays
+                def decode_part(part_idx: int, type_idx: int) -> tuple[Any, int]:
+                    gtype = self.types[type_idx]
+                    if gtype == GGUFValueType.STRING:
+                        return to_string(self.parts[part_idx + 1]), part_idx + 2
+                    elif gtype == GGUFValueType.ARRAY:
+                        alen = int(self.parts[part_idx + 1][0])
+                        res = []
+                        curr_idx = part_idx + 2
+                        for _ in range(alen):
+                            val, curr_idx = decode_part(curr_idx, type_idx + 1)
+                            res.append(val)
+                        return res, curr_idx
                     else:
-                        return [pv for idx in self.data[index_or_slice] for pv in self.parts[idx].tolist()]
+                        return self.parts[part_idx].tolist()[0], part_idx + 1
+
+                val, _ = decode_part(3, 0)
+                return val[index_or_slice]
 
             if main_type == GGUFValueType.STRING:
                 return to_string(self.parts[-1])
