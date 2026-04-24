@@ -15,84 +15,105 @@ struct op_desc {
     char buffs[64 * GGML_MAX_SRC];
     char names[64 * GGML_MAX_SRC];
 
-    int format_tensor_dims(char * str, const struct ggml_tensor * t) {
+    int format_tensor_dims(char * str, size_t size, const struct ggml_tensor * t) {
         if (t->ne[2] == 1 && t->ne[3] == 1) {
-            return sprintf(str, "%d:%d", (int) t->ne[0], (int) t->ne[1]);
+            return snprintf(str, size, "%d:%d", (int) t->ne[0], (int) t->ne[1]);
         } else {
-            return sprintf(str, "%d:%d:%d:%d", (int) t->ne[0], (int) t->ne[1], (int) t->ne[2], (int) t->ne[3]);
+            return snprintf(str, size, "%d:%d:%d:%d", (int) t->ne[0], (int) t->ne[1], (int) t->ne[2], (int) t->ne[3]);
         }
     }
 
-    void format_op_dims(char * str, const struct ggml_tensor * t) {
+    void format_op_dims(char * str, size_t size, const struct ggml_tensor * t) {
         char * p = str;
+        size_t rem = size;
+        int n;
 
         // append src0 and src1 (if any)
         if (t->src[0]) {
-            p += format_tensor_dims(p, t->src[0]);
+            n = format_tensor_dims(p, rem, t->src[0]);
+            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
 
             for (int i = 1; i < GGML_MAX_SRC && t->src[i]; i++) {
-                p += sprintf(p, " x ");
-                p += format_tensor_dims(p, t->src[i]);
+                n = snprintf(p, rem, " x ");
+                if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
+
+                n = format_tensor_dims(p, rem, t->src[i]);
+                if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
             }
 
-            p += sprintf(p, " -> ");
+            n = snprintf(p, rem, " -> ");
+            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
         }
 
         // format self dims separately for better visual alignment
         char self[64];
-        format_tensor_dims(self, t);
+        format_tensor_dims(self, sizeof(self), t);
 
-        p += sprintf(p, "%s", self);
+        snprintf(p, rem, "%s", self);
     }
 
-    int format_tensor_strides(char * str, const struct ggml_tensor * t) {
+    int format_tensor_strides(char * str, size_t size, const struct ggml_tensor * t) {
         const char * c = ggml_is_contiguous(t) ? "" : "!";
 
         if (t->ne[2] == 1 && t->ne[3] == 1) {
-            return sprintf(str, "%zu:%zu%s", (size_t) t->nb[0], (size_t) t->nb[1], c);
+            return snprintf(str, size, "%zu:%zu%s", (size_t) t->nb[0], (size_t) t->nb[1], c);
         } else {
-            return sprintf(str, "%zu:%zu:%zu:%zu%s", (size_t) t->nb[0], (size_t) t->nb[1], (size_t) t->nb[2], (size_t) t->nb[3], c);
+            return snprintf(str, size, "%zu:%zu:%zu:%zu%s", (size_t) t->nb[0], (size_t) t->nb[1], (size_t) t->nb[2], (size_t) t->nb[3], c);
         }
     }
 
-    void format_op_strides(char * str, const struct ggml_tensor * t) {
+    void format_op_strides(char * str, size_t size, const struct ggml_tensor * t) {
         char * p = str;
+        size_t rem = size;
+        int n;
 
         // append src0 and src1 (if any)
         if (t->src[0]) {
-            p += format_tensor_strides(p, t->src[0]);
+            n = format_tensor_strides(p, rem, t->src[0]);
+            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
 
             for (int i = 1; i < GGML_MAX_SRC && t->src[i]; i++) {
-                p += sprintf(p, " x ");
-                p += format_tensor_strides(p, t->src[i]);
+                n = snprintf(p, rem, " x ");
+                if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
+
+                n = format_tensor_strides(p, rem, t->src[i]);
+                if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
             }
 
-            p += sprintf(p, " -> ");
+            n = snprintf(p, rem, " -> ");
+            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
         }
 
         // format self dims separately for better visual alignment
         char self[64];
-        format_tensor_strides(self, t);
+        format_tensor_strides(self, sizeof(self), t);
 
-        p += sprintf(p, "%s", self);
+        snprintf(p, rem, "%s", self);
     }
 
-    void format_op_types(char * str, const struct ggml_tensor * t) {
+    void format_op_types(char * str, size_t size, const struct ggml_tensor * t) {
         char * p = str;
+        size_t rem = size;
+        int n;
 
         // append src0 and src1 (if any)
         if (t->src[0]) {
-            p += sprintf(p, "%s", ggml_type_name(t->src[0]->type));
+            n = snprintf(p, rem, "%s", ggml_type_name(t->src[0]->type));
+            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
 
             for (int i = 1; i < GGML_MAX_SRC && t->src[i]; i++) {
-                p += sprintf(p, " x ");
-                p += sprintf(p, "%s", ggml_type_name(t->src[i]->type));
+                n = snprintf(p, rem, " x ");
+                if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
+
+                n = snprintf(p, rem, "%s", ggml_type_name(t->src[i]->type));
+                if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
             }
 
-            p += sprintf(p, " -> ");
+            n = snprintf(p, rem, " -> ");
+            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
         }
 
-        p += sprintf(p, "%s", ggml_type_name(t->type));
+        snprintf(p, rem, "%s", ggml_type_name(t->type));
     }
 
     const char * tensor_buff_name(const struct ggml_tensor * t) {
@@ -102,48 +123,62 @@ struct op_desc {
         return "NONE";
     }
 
-    void format_op_buffs(char * str, const struct ggml_tensor * t) {
+    void format_op_buffs(char * str, size_t size, const struct ggml_tensor * t) {
         char * p = str;
+        size_t rem = size;
+        int n;
 
         // append src0 and src1 (if any)
         if (t->src[0]) {
-            p += sprintf(p, "%s", tensor_buff_name(t->src[0]));
+            n = snprintf(p, rem, "%s", tensor_buff_name(t->src[0]));
+            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
 
             for (int i = 1; i < GGML_MAX_SRC && t->src[i]; i++) {
-                p += sprintf(p, " x ");
-                p += sprintf(p, "%s", tensor_buff_name(t->src[i]));
+                n = snprintf(p, rem, " x ");
+                if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
+
+                n = snprintf(p, rem, "%s", tensor_buff_name(t->src[i]));
+                if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
             }
 
-            p += sprintf(p, " -> ");
+            n = snprintf(p, rem, " -> ");
+            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
         }
 
-        p += sprintf(p, "%s", tensor_buff_name(t));
+        snprintf(p, rem, "%s", tensor_buff_name(t));
     }
 
-    void format_op_names(char * str, const struct ggml_tensor * t) {
+    void format_op_names(char * str, size_t size, const struct ggml_tensor * t) {
         char * p = str;
+        size_t rem = size;
+        int n;
 
         // append src0 and src1 (if any)
         if (t->src[0]) {
-            p += sprintf(p, "%s", t->src[0]->name);
+            n = snprintf(p, rem, "%s", t->src[0]->name);
+            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
 
             for (int i = 1; i < GGML_MAX_SRC && t->src[i]; i++) {
-                p += sprintf(p, " x ");
-                p += sprintf(p, "%s", t->src[i]->name);
+                n = snprintf(p, rem, " x ");
+                if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
+
+                n = snprintf(p, rem, "%s", t->src[i]->name);
+                if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
             }
 
-            p += sprintf(p, " -> ");
+            n = snprintf(p, rem, " -> ");
+            if (n > 0 && (size_t)n < rem) { p += n; rem -= n; } else { return; }
         }
 
-        p += sprintf(p, "%s", t->name);
+        snprintf(p, rem, "%s", t->name);
     }
 
     void format(const ggml_tensor * op) {
-        format_op_dims(dims, op);
-        format_op_strides(strides, op);
-        format_op_types(types, op);
-        format_op_buffs(buffs, op);
-        format_op_names(names, op);
+        format_op_dims(dims, sizeof(dims), op);
+        format_op_strides(strides, sizeof(strides), op);
+        format_op_types(types, sizeof(types), op);
+        format_op_buffs(buffs, sizeof(buffs), op);
+        format_op_names(names, sizeof(names), op);
     }
 
     op_desc() {}
