@@ -459,16 +459,27 @@ class LlamaBenchDataJSONL(LlamaBenchDataSQLite3):
         db_fields = LLAMA_BENCH_DB_FIELDS if tool == "llama-bench" else TEST_BACKEND_OPS_DB_FIELDS
 
         with open(data_file, "r", encoding="utf-8") as fp:
+            rows = []
+            query = None
+            db_fields_set = set(db_fields)
+
             for i, line in enumerate(fp):
                 parsed = json.loads(line)
 
-                for k in parsed.keys() - set(db_fields):
+                for k in parsed.keys() - db_fields_set:
                     del parsed[k]
 
                 if (missing_keys := self._check_keys(parsed.keys())):
                     raise RuntimeError(f"Missing required data key(s) at line {i + 1}: {', '.join(missing_keys)}")
 
-                self.cursor.execute(f"INSERT INTO {self.table_name}({', '.join(parsed.keys())}) VALUES({', '.join('?' * len(parsed))});", tuple(parsed.values()))
+                if query is None:
+                    keys = tuple(parsed.keys())
+                    query = f"INSERT INTO {self.table_name}({', '.join(keys)}) VALUES({', '.join('?' * len(keys))});"
+
+                rows.append(tuple(parsed.values()))
+
+            if query and rows:
+                self.cursor.executemany(query, rows)
 
         self._builds_init()
 
