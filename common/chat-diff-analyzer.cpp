@@ -561,13 +561,20 @@ analyze_content::analyze_content(const common_chat_template & tmpl, const analyz
 
     // Determine content mode
     if (!start.empty() || !end.empty()) {
-        mode = content_mode::ALWAYS_WRAPPED;
-        // TODO: END_DELIMITED content mode - delimited at end but not at start?
+        if (start.empty() && !end.empty()) {
+            mode = content_mode::END_DELIMITED;
+        } else {
+            mode = content_mode::ALWAYS_WRAPPED;
+        }
     }
 }
 
 bool analyze_content::is_always_wrapped() const {
     return mode == content_mode::ALWAYS_WRAPPED && !start.empty() && !end.empty();
+}
+
+bool analyze_content::is_end_delimited() const {
+    return mode == content_mode::END_DELIMITED && start.empty() && !end.empty();
 }
 
 analyze_tools::analyze_tools(const common_chat_template & tmpl,

@@ -149,6 +149,9 @@ common_peg_parser analyze_content::build_parser(parser_build_context & ctx) cons
         }
         return p.content(p.until(start)) + start + p.content(p.until(end)) + end + p.end();
     }
+    if (is_end_delimited()) {
+        return ctx.reasoning_parser + p.content(p.until(end)) + end + p.end();
+    }
     return ctx.reasoning_parser + p.content(p.rest()) + p.end();
 }
 
@@ -157,6 +160,9 @@ common_peg_parser analyze_content::build_optional_wrapped(parser_build_context &
 
     if (is_always_wrapped()) {
         return p.optional(start + p.content(p.until(end)) + end);
+    }
+    if (is_end_delimited()) {
+        return p.optional(p.content(p.until(end)) + end);
     }
     return p.eps();
 }
