@@ -3,6 +3,9 @@ extra-paths = ["./gguf-py", "./examples/model-conversion/scripts", "./tools/serv
 python-version = "3.10"
 
 [rules]
+unused-ignore-comment = "ignore"
+unused-type-ignore-comment = "ignore"
+unresolved-reference = "ignore"
 deprecated = "warn"
 
 [src]
@@ -34,10 +37,5 @@ not-subscriptable = "ignore"
 include = [
     "**/*.py"
 ]
-
 [overrides.rules]
 unresolved-import = "ignore"
-
-
-unused-ignore-comment = "ignore"
-unused-type-ignore-comment = "ignore"
