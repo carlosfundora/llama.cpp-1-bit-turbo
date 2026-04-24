@@ -1,5 +1,5 @@
-#include "chat-auto-parser.h"
 #include "chat-auto-parser-helpers.h"
+#include "chat-auto-parser.h"
 #include "chat-peg-parser.h"
 #include "chat.h"
 #include "common.h"
@@ -18,12 +18,12 @@ using json = nlohmann::ordered_json;
 
 namespace autoparser {
 
-static const std::string FUN_FIRST = "FFF_FIRST_FUN_F";
-static const std::string FUN_SECOND = "SSS_SECOND_FUN_S";
-static const std::string ARG_FIRST = "AA_ARG_FST_AA";
-static const std::string ARG_SECOND = "BB_ARG_SND_BB";
-static const std::string USER_MSG = "U_USER_MSG Hello END_U";
-static const std::string ASSISTANT_MSG = "A_ASST_MSG I can help END_A";
+static const std::string FUN_FIRST        = "FFF_FIRST_FUN_F";
+static const std::string FUN_SECOND       = "SSS_SECOND_FUN_S";
+static const std::string ARG_FIRST        = "AA_ARG_FST_AA";
+static const std::string ARG_SECOND       = "BB_ARG_SND_BB";
+static const std::string USER_MSG         = "U_USER_MSG Hello END_U";
+static const std::string ASSISTANT_MSG    = "A_ASST_MSG I can help END_A";
 static const std::string THINKING_CONTENT = "REASON_PART I am thinking END_R";
 
 static std::vector<std::function<void(const common_chat_template & tmpl, autoparser &)>> workarounds(
@@ -32,8 +32,7 @@ static std::vector<std::function<void(const common_chat_template & tmpl, autopar
       [](const common_chat_template & tmpl, autoparser & analysis) -> void {
           if (tmpl.src.find("content.split('</think>')") != std::string::npos &&
               tmpl.src.find("reasoning_content") == std::string::npos &&
-              tmpl.src.find("<SPECIAL_12>") == std::string::npos &&
-              analysis.reasoning.mode == reasoning_mode::NONE) {
+              tmpl.src.find("<SPECIAL_12>") == std::string::npos && analysis.reasoning.mode == reasoning_mode::NONE) {
               analysis.reasoning.mode  = reasoning_mode::TAG_BASED;
               analysis.reasoning.start = "<think>";
               analysis.reasoning.end   = "</think>";
@@ -131,29 +130,28 @@ static std::vector<std::function<void(const common_chat_template & tmpl, autopar
               analysis.tools.format.per_call_end   = "<｜tool▁call▁end｜>";
               analysis.tools.function.close        = "```";
           }
-      }
-    });
+      } });
 
 // Common JSON structures
 static json params_schema = {
-    { "type",       "object"                                                           },
+    { "type",       "object"                                                             },
     { "properties",
      { { ARG_FIRST, { { "type", "string" }, { "description", "First argument" } } },
         { ARG_SECOND, { { "type", "string" }, { "description", "Second argument" } } } } },
-    { "required",   json::array({})                                                    }
+    { "required",   json::array({})                                                      }
 };
 
 static json tools = json::array({
     { { "type", "function" },
      { "function",
-        json{ { "name", FUN_FIRST }, { "description", "Test function foo" }, { "parameters", params_schema } } } },
+        json{ { "name", FUN_FIRST }, { "description", "Test function foo" }, { "parameters", params_schema } } }  },
     { { "type", "function" },
      { "function",
         json{ { "name", FUN_SECOND }, { "description", "Test function bar" }, { "parameters", params_schema } } } }
 });
 
 static json user_msg = json{
-    { "role",    "user"  },
+    { "role",    "user"   },
     { "content", USER_MSG }
 };
 
@@ -166,19 +164,42 @@ static json build_tool_call(const std::string & name, const json & args, const s
 }
 
 static json first_tool_call_zero_args         = build_tool_call(FUN_FIRST, json::object(), "call00001");
-static json first_tool_call_one_arg           = build_tool_call(FUN_FIRST, {{ ARG_FIRST, "XXXX" }}, "call00001");
-static json first_tool_call_one_arg_other_val = build_tool_call(FUN_FIRST, {{ ARG_FIRST, "YYYY" }}, "call00001");
-static json first_tool_call_other_arg         = build_tool_call(FUN_FIRST, {{ ARG_SECOND, "YYYY" }}, "call00001");
+static json first_tool_call_one_arg           = build_tool_call(FUN_FIRST,
+                                                                {
+                                                          { ARG_FIRST, "XXXX" }
+},
+                                                                "call00001");
+static json first_tool_call_one_arg_other_val = build_tool_call(FUN_FIRST,
+                                                                {
+                                                                    { ARG_FIRST, "YYYY" }
+},
+                                                                "call00001");
+static json first_tool_call_other_arg         = build_tool_call(FUN_FIRST,
+                                                                {
+                                                            { ARG_SECOND, "YYYY" }
+},
+                                                                "call00001");
 
-static json first_tool_call =
-    build_tool_call(FUN_FIRST, json{{ ARG_FIRST,  "XXXX" }, { ARG_SECOND, "YYYY" }}, "call00001");
-static json second_tool_call =
-    build_tool_call(FUN_SECOND, json{ { ARG_FIRST,  "XXXX" }, { ARG_SECOND, "YYYY" }}, "call00002");
-static json first_tool_call_alt_id =
-    build_tool_call(FUN_FIRST, json{{ ARG_FIRST,  "XXXX" }, { ARG_SECOND, "YYYY" }}, "call99999");
+static json first_tool_call        = build_tool_call(FUN_FIRST,
+                                                     json{
+                                                         { ARG_FIRST,  "XXXX" },
+                                                         { ARG_SECOND, "YYYY" }
+},
+                                                     "call00001");
+static json second_tool_call       = build_tool_call(FUN_SECOND,
+                                                     json{
+                                                         { ARG_FIRST,  "XXXX" },
+                                                         { ARG_SECOND, "YYYY" }
+},
+                                                     "call00002");
+static json first_tool_call_alt_id = build_tool_call(FUN_FIRST,
+                                                     json{
+                                                         { ARG_FIRST,  "XXXX" },
+                                                         { ARG_SECOND, "YYYY" }
+},
+                                                     "call99999");
 
-template <typename T>
-static std::string mode_to_str(T mode) {
+template <typename T> static std::string mode_to_str(T mode) {
     std::ostringstream os;
     os << mode;
     return os.str();
@@ -186,9 +207,10 @@ static std::string mode_to_str(T mode) {
 
 void autoparser::analyze_template(const common_chat_template & tmpl) {
     jinja_caps = tmpl.original_caps();
-    reasoning = analyze_reasoning(tmpl, jinja_caps.supports_tool_calls);
-    content = analyze_content(tmpl, reasoning);
-    tools = analyze_tools(jinja_caps.supports_tool_calls ? analyze_tools(tmpl, jinja_caps, reasoning) : analyze_tools());
+    reasoning  = analyze_reasoning(tmpl, jinja_caps.supports_tool_calls);
+    content    = analyze_content(tmpl, reasoning);
+    tools =
+        analyze_tools(jinja_caps.supports_tool_calls ? analyze_tools(tmpl, jinja_caps, reasoning) : analyze_tools());
     collect_preserved_tokens();
 
     for (auto & workaround : workarounds) {
@@ -222,9 +244,10 @@ void autoparser::analyze_template(const common_chat_template & tmpl) {
     LOG_DBG("args_field: '%s'\n", tools.format.args_field.c_str());
     LOG_DBG("id_field: '%s'\n", tools.format.id_field.c_str());
     LOG_DBG("gen_id_field: '%s'\n", tools.format.gen_id_field.c_str());
-    LOG_DBG("parameter_order: '%s'\n", std::accumulate(tools.format.parameter_order.begin(), tools.format.parameter_order.end(),
-        std::string(""), [] (const std::string & a, const std::string & b) { return a.empty() ? b : a + ", " + b; }
-        ).c_str());
+    LOG_DBG("parameter_order: '%s'\n",
+            std::accumulate(tools.format.parameter_order.begin(), tools.format.parameter_order.end(), std::string(""),
+                            [](const std::string & a, const std::string & b) { return a.empty() ? b : a + ", " + b; })
+                .c_str());
 
     LOG_DBG(ANSI_PURPLE "=== Differential analysis complete ===\n" ANSI_RESET);
     analysis_complete = true;
@@ -263,8 +286,7 @@ void autoparser::collect_preserved_tokens() {
     add_token(tools.call_id.suffix);
 }
 
-analyze_reasoning::analyze_reasoning(const common_chat_template & tmpl, bool supports_tools)
-    : analyze_base(tmpl) {
+analyze_reasoning::analyze_reasoning(const common_chat_template & tmpl, bool supports_tools) : analyze_base(tmpl) {
     LOG_DBG(ANSI_PURPLE "=== Starting differential analysis ===\n" ANSI_RESET);
     LOG_DBG(ANSI_ORANGE "Phase 1: Reasoning analysis\n" ANSI_RESET);
 
@@ -277,7 +299,7 @@ analyze_reasoning::analyze_reasoning(const common_chat_template & tmpl, bool sup
 
 void analyze_reasoning::compare_reasoning_presence() {
     json user_msg = json{
-        { "role",    "user"  },
+        { "role",    "user"   },
         { "content", USER_MSG }
     };
 
@@ -287,9 +309,9 @@ void analyze_reasoning::compare_reasoning_presence() {
     };
 
     json assistant_with_reasoning = json{
-        { "role",              "assistant"                },
-        { "content",           ASSISTANT_MSG              },
-        { "reasoning_content", THINKING_CONTENT           }
+        { "role",              "assistant"      },
+        { "content",           ASSISTANT_MSG    },
+        { "reasoning_content", THINKING_CONTENT }
     };
 
     template_params params;
@@ -310,25 +332,27 @@ void analyze_reasoning::compare_reasoning_presence() {
     const std::string reasoning_content = THINKING_CONTENT;
 
     if (!diff.right.empty() && diff.right.find(reasoning_content) != std::string::npos) {
-        auto parser_delimiter = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
-            return p.literal(reasoning_content) + p.space() + p.optional(p.tag("post", (p.marker() + p.space())) + p.rest());
+        auto parser_delimiter = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+            return p.literal(reasoning_content) + p.space() +
+                   p.optional(p.tag("post", (p.marker() + p.space())) + p.rest());
         });
-        auto parser_wrapped = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
-            return p.tag("pre", p.marker() + p.space()) + p.literal(reasoning_content) + p.space() + p.tag("post", (p.marker() + p.space())) + p.rest();
+        auto parser_wrapped   = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+            return p.tag("pre", p.marker() + p.space()) + p.literal(reasoning_content) + p.space() +
+                   p.tag("post", (p.marker() + p.space())) + p.rest();
         });
         // try the more aggressive parse first, if it fails, fall back to the delimiter one
-        auto result = parser_wrapped.parse_anywhere_and_extract(comparison->output_B);
+        auto result           = parser_wrapped.parse_anywhere_and_extract(comparison->output_B);
         if (!result.result.success()) {
             result = parser_delimiter.parse_anywhere_and_extract(comparison->output_B);
         }
         if (result.result.success()) {
             if (!result.tags["pre"].empty() && !result.tags["post"].empty()) {
-                mode = reasoning_mode::TAG_BASED;
+                mode  = reasoning_mode::TAG_BASED;
                 start = trim_leading_whitespace(result.tags["pre"]);
                 end   = trim_trailing_whitespace(result.tags["post"]);
             } else if (!result.tags["post"].empty()) {
                 mode = reasoning_mode::TAG_BASED;
-                end = trim_trailing_whitespace(result.tags["post"]);
+                end  = trim_trailing_whitespace(result.tags["post"]);
             }
         }
     }
@@ -336,7 +360,7 @@ void analyze_reasoning::compare_reasoning_presence() {
 
 void analyze_reasoning::compare_thinking_enabled() {
     json user_msg = json{
-        { "role",    "user"  },
+        { "role",    "user"   },
         { "content", USER_MSG }
     };
 
@@ -348,13 +372,13 @@ void analyze_reasoning::compare_thinking_enabled() {
     auto comparison = compare_variants(*tmpl, params, [&](template_params & p) { p.enable_thinking = true; });
 
     if (!comparison) {
-        LOG_DBG(ANSI_ORANGE "%s: Template application failed\n" ANSI_RESET , __func__);
+        LOG_DBG(ANSI_ORANGE "%s: Template application failed\n" ANSI_RESET, __func__);
         return;
     }
 
     const auto & diff = comparison->diff;
 
-    std::string left_trimmed = trim_whitespace(diff.left);
+    std::string left_trimmed  = trim_whitespace(diff.left);
     std::string right_trimmed = trim_whitespace(diff.right);
 
     if (left_trimmed.empty() && !diff.right.empty()) {
@@ -368,10 +392,11 @@ void analyze_reasoning::compare_thinking_enabled() {
         if (!left_trimmed.empty() && string_ends_with(comparison->output_A, left_trimmed)) {
             if (end.empty()) {
                 auto seg = prune_whitespace_segments(segmentize_markers(comparison->output_A));
-                if (seg.size() >= 2 && seg[seg.size() - 1].value == left_trimmed && seg[seg.size() - 2].type == segment_type::MARKER) {
+                if (seg.size() >= 2 && seg[seg.size() - 1].value == left_trimmed &&
+                    seg[seg.size() - 2].type == segment_type::MARKER) {
                     start = seg[seg.size() - 2].value;
                 }
-                end = trim_trailing_whitespace(diff.left);
+                end  = trim_trailing_whitespace(diff.left);
                 mode = reasoning_mode::TAG_BASED;
             }
         }
@@ -379,17 +404,17 @@ void analyze_reasoning::compare_thinking_enabled() {
         // Full-output diff is noisy (e.g., SmolLM3 changes the system message when enable_thinking flips).
         // Try to find reasoning markers by tail-anchoring:
         // one output's generation prompt tail may appear in the other with extra reasoning markers appended.
-        const auto & output_A = comparison->output_A;
-        const auto & output_B = comparison->output_B;
+        const auto & output_A   = comparison->output_A;
+        const auto & output_B   = comparison->output_B;
         const size_t anchor_len = 64;
 
         for (int dir = 0; dir < 2; dir++) {
             const auto & base     = dir == 0 ? output_B : output_A;
             const auto & extended = dir == 0 ? output_A : output_B;
 
-            size_t len = std::min(base.size(), anchor_len);
+            size_t      len    = std::min(base.size(), anchor_len);
             std::string anchor = base.substr(base.size() - len);
-            auto pos = extended.rfind(anchor);
+            auto        pos    = extended.rfind(anchor);
             if (pos == std::string::npos || pos + len >= extended.size()) {
                 continue;
             }
@@ -405,7 +430,7 @@ void analyze_reasoning::compare_thinking_enabled() {
                     start = seg[0].value;
                 }
                 if (end.empty()) {
-                    end   = seg[1].value;
+                    end = seg[1].value;
                 }
                 mode = reasoning_mode::TAG_BASED;
                 break;
@@ -457,40 +482,43 @@ void analyze_reasoning::compare_reasoning_scope() {
         mode = reasoning_mode::TOOLS_ONLY;
         LOG_DBG(ANSI_ORANGE "%s: Detected TOOLS_ONLY reasoning mode\n" ANSI_RESET, __func__);
 
-        auto parser_wrapped = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
-            return p.tag("pre", p.marker() + p.space()) + p.literal(reasoning_content) + p.space() + p.tag("post", (p.marker() + p.space()));
+        auto parser_wrapped = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+            return p.tag("pre", p.marker() + p.space()) + p.literal(reasoning_content) + p.space() +
+                   p.tag("post", (p.marker() + p.space()));
         });
-        auto result = parser_wrapped.parse_anywhere_and_extract(comparison->output_B);
+        auto result         = parser_wrapped.parse_anywhere_and_extract(comparison->output_B);
         if (result.result.success()) {
             start = result.tags["pre"];
-            end = trim_trailing_whitespace(result.tags["post"]);
+            end   = trim_trailing_whitespace(result.tags["post"]);
         } else {
-            auto parser_delimiter = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
+            auto parser_delimiter = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
                 return p.literal(reasoning_content) + p.space() + p.optional(p.tag("post", (p.marker() + p.space())));
             });
-            result = parser_delimiter.parse_anywhere_and_extract(comparison->output_B);
+            result                = parser_delimiter.parse_anywhere_and_extract(comparison->output_B);
             if (result.result.success()) {
                 end = trim_trailing_whitespace(result.tags["post"]);
             } else {
-                LOG_DBG(ANSI_ORANGE "%s: Unable to extract reasoning markers, falling back to reasoning = NONE\n" ANSI_RESET, __func__);
+                LOG_DBG(ANSI_ORANGE
+                        "%s: Unable to extract reasoning markers, falling back to reasoning = NONE\n" ANSI_RESET,
+                        __func__);
                 mode = reasoning_mode::NONE;
             }
         }
     }
 }
 
-analyze_content::analyze_content(const common_chat_template & tmpl, const analyze_reasoning & reasoning)
-    : analyze_base(tmpl) {
+analyze_content::analyze_content(const common_chat_template & tmpl, const analyze_reasoning & reasoning) :
+    analyze_base(tmpl) {
     LOG_DBG(ANSI_ORANGE "Phase 2: Content analysis\n" ANSI_RESET);
 
     json assistant_content_only = json{
-        { "role",    "assistant"     },
-        { "content", ASSISTANT_MSG   }
+        { "role",    "assistant"   },
+        { "content", ASSISTANT_MSG }
     };
 
     json assistant_with_tools = json{
-        { "role",       "assistant" },
-        { "content",    ""          },
+        { "role",       "assistant"                                                                 },
+        { "content",    ""                                                                          },
         { "tool_calls", json::array({ build_tool_call("test_func", json{ { "arg1", "value1" } }) }) }
     };
 
@@ -531,14 +559,14 @@ analyze_content::analyze_content(const common_chat_template & tmpl, const analyz
         });
         if (parser.parse_and_extract(diff_reasoning.left).result.success()) {
             // We only have the content text in the diff (possibly with a stray EOG marker), so no markers
-            mode = content_mode::PLAIN;
+            mode                = content_mode::PLAIN;
             found_plain_content = true;
         } else if (reasoning.mode != reasoning_mode::NONE && !reasoning.end.empty()) {
             auto post_reasoning_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
                 return p.literal(reasoning.end) + p.space() + p.literal(response);
             });
             if (post_reasoning_parser.parse_anywhere_and_extract(diff_reasoning.left).result.success()) {
-                mode = content_mode::PLAIN;
+                mode                = content_mode::PLAIN;
                 found_plain_content = true;
             }
         }
@@ -549,13 +577,14 @@ analyze_content::analyze_content(const common_chat_template & tmpl, const analyz
             rdiff = rdiff.substr(rdiff.find(reasoning.end) + reasoning.end.length());
         }
         // Take the more promising diff
-        std::string pure_content = rdiff.length() > diff_tools.left.length() ? rdiff : diff_tools.left;
-        auto parser_wrapped = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
-            return p.tag("pre", p.marker() + p.space()) + p.literal(response) + p.space() + p.tag("post", (p.marker() + p.space())) + p.rest();
+        std::string pure_content   = rdiff.length() > diff_tools.left.length() ? rdiff : diff_tools.left;
+        auto        parser_wrapped = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+            return p.tag("pre", p.marker() + p.space()) + p.literal(response) + p.space() +
+                   p.tag("post", (p.marker() + p.space())) + p.rest();
         });
-        auto result = parser_wrapped.parse_anywhere_and_extract(pure_content);
-        start = result.tags["pre"];
-        end = result.tags["post"];
+        auto        result         = parser_wrapped.parse_anywhere_and_extract(pure_content);
+        start                      = result.tags["pre"];
+        end                        = result.tags["post"];
         // TODO: WRAPPED_WITH_REASONING
     }
 
@@ -572,8 +601,8 @@ bool analyze_content::is_always_wrapped() const {
 
 analyze_tools::analyze_tools(const common_chat_template & tmpl,
                              const jinja::caps &          caps,
-                             const analyze_reasoning &    reasoning)
-    : analyze_base(tmpl) {
+                             const analyze_reasoning &    reasoning) :
+    analyze_base(tmpl) {
     LOG_DBG(ANSI_ORANGE "Phase 3: Tool call analysis\n" ANSI_RESET);
 
     analyze_tool_calls(reasoning);
@@ -638,9 +667,9 @@ void analyze_tools::analyze_tool_call_format(const std::string &       haystack,
     }
 
     auto in_json_haystack = [&haystack](const std::string & needle) -> bool {
-        auto parser = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
-            return p.choice({ p.literal("{"), p.literal(":") }) << p.choice({
-                p.tag("dq", p.literal("\"") + p.literal(needle) + p.literal("\"")) });
+        auto parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+            return p.choice({ p.literal("{"), p.literal(":") })
+                   << p.choice({ p.tag("dq", p.literal("\"") + p.literal(needle) + p.literal("\"")) });
         });
         auto result = parser.parse_anywhere_and_extract(haystack);
         return result.result.success();
@@ -687,11 +716,12 @@ void analyze_tools::analyze_tool_call_format_json_native(const std::string & cle
                                                          const std::string & fun_name_needle,
                                                          const std::string & arg_name_needle) {
     // we might not have the typical OpenAI tool calling structure
-    int  json_start     = clean_haystack.find_first_of('{');
-    int  json_end       = clean_haystack.find_last_of('}');
-    std::string cut     = clean_haystack.substr(json_start, json_end - json_start + 1);
-    json call_struct    = json::parse(cut);
-    auto register_field = [&](const std::string & prefix, const nlohmann::detail::iteration_proxy_value<json::iterator> & subel) {
+    int         json_start     = clean_haystack.find_first_of('{');
+    int         json_end       = clean_haystack.find_last_of('}');
+    std::string cut            = clean_haystack.substr(json_start, json_end - json_start + 1);
+    json        call_struct    = json::parse(cut);
+    auto        register_field = [&](const std::string &                                             prefix,
+                              const nlohmann::detail::iteration_proxy_value<json::iterator> & subel) {
         if (subel.value().is_string() && std::string(subel.value()).find("call0000") != std::string::npos) {
             format.id_field = !prefix.empty() ? prefix + "." + subel.key() : subel.key();
         } else if (subel.value().is_string() && std::string(subel.value()) == fun_name_needle) {
@@ -723,7 +753,7 @@ void analyze_tools::analyze_tool_call_format_json_native(const std::string & cle
             register_field("", el);
         }
     }
-    auto array_parser = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
+    auto array_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
         return p.tag("pre", p.literal("[") + p.space()) + p.literal(cut) + p.tag("post", p.space() + p.literal("]"));
     });
 
@@ -733,7 +763,7 @@ void analyze_tools::analyze_tool_call_format_json_native(const std::string & cle
         json_start -= ar_parse_res.tags["pre"].length();
         json_end += ar_parse_res.tags["post"].length();
     }
-    json_end++; // we want to move past the closing char for end marker extraction
+    json_end++;  // we want to move past the closing char for end marker extraction
 
     std::vector<std::pair<size_t, std::string>> located_params;
     if (!format.name_field.empty()) {
@@ -765,57 +795,61 @@ void analyze_tools::analyze_tool_call_format_json_native(const std::string & cle
 void analyze_tools::analyze_tool_call_format_non_json(const std::string & clean_haystack,
                                                       const std::string & fun_name_needle) {
     // first, let's find out if the function is inside a tag or standalone
-    auto fun_marker_parser = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
-            return p.tag("fun_marker", p.choice({
-            p.tag("fun_pre", p.literal("<") + p.until_one_of({ ">", fun_name_needle })) + p.literal(fun_name_needle) +
-                p.tag("fun_post", p.negate(p.space() + p.literal("<")) + p.until(">") + p.literal(">")) + p.space(),
-            p.tag("fun_pre", p.literal("[") + p.until_one_of({ "]", fun_name_needle })) + p.literal(fun_name_needle) +
-                p.tag("fun_post", p.negate(p.space() + p.literal("[") + p.until("]") + p.literal("]")) + p.space()) }));
+    auto        fun_marker_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+        return p.tag(
+            "fun_marker",
+            p.choice({ p.tag("fun_pre", p.literal("<") + p.until_one_of({ ">", fun_name_needle })) +
+                           p.literal(fun_name_needle) +
+                           p.tag("fun_post", p.negate(p.space() + p.literal("<")) + p.until(">") + p.literal(">")) +
+                           p.space(),
+                       p.tag("fun_pre", p.literal("[") + p.until_one_of({ "]", fun_name_needle })) +
+                           p.literal(fun_name_needle) +
+                           p.tag("fun_post",
+                                        p.negate(p.space() + p.literal("[") + p.until("]") + p.literal("]")) + p.space()) }));
     });
-    auto fun_res = fun_marker_parser.parse_anywhere_and_extract(clean_haystack);
-    std::string fun_marker = fun_name_needle;
+    auto        fun_res           = fun_marker_parser.parse_anywhere_and_extract(clean_haystack);
+    std::string fun_marker        = fun_name_needle;
     if (fun_res.result.success()) {
         fun_marker = fun_res.tags["fun_marker"];
     }
     // now, consume up to two markers, then treat everything up to the function marker as function name prefix
-    auto per_tool_parser = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
+    auto                per_tool_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
         return p.tag("sec_start", p.marker() + p.space()) + p.tag("call_start", p.marker() + p.space()) +
-            p.tag("fun_pre", p.until(fun_marker)) + fun_marker + p.tag("rest", p.rest());
+               p.tag("fun_pre", p.until(fun_marker)) + fun_marker + p.tag("rest", p.rest());
     });
-    auto section_parser = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
+    auto                section_parser  = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
         return p.tag("sec_start", p.marker() + p.space()) + fun_marker + p.tag("rest", p.rest());
     });
-    auto result = per_tool_parser.parse_anywhere_and_extract(clean_haystack);
+    auto                result          = per_tool_parser.parse_anywhere_and_extract(clean_haystack);
     tagged_parse_result result_end;
     if (result.result.success()) {
-        auto double_closer_parser = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
+        auto double_closer_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
             return p.tag("call_end", p.marker() + p.space()) + p.tag("sec_end", p.marker() + p.space()) + p.end();
         });
-        result_end = double_closer_parser.parse_anywhere_and_extract(result.tags["rest"]);
-        function.name_prefix = fun_res.tags["fun_pre"] + function.name_prefix;
+        result_end                = double_closer_parser.parse_anywhere_and_extract(result.tags["rest"]);
+        function.name_prefix      = fun_res.tags["fun_pre"] + function.name_prefix;
     } else {
-        result = section_parser.parse_anywhere_and_extract(clean_haystack);
-        auto single_closer_parser = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
-            return p.tag("sec_end", p.marker() + p.space()) + p.end();
-        });
+        result                    = section_parser.parse_anywhere_and_extract(clean_haystack);
+        auto single_closer_parser = build_tagged_peg_parser(
+            [&](common_peg_parser_builder & p) { return p.tag("sec_end", p.marker() + p.space()) + p.end(); });
         result_end = single_closer_parser.parse_anywhere_and_extract(result.tags["rest"]);
     }
     format.per_call_start = result.tags["call_start"];
-    format.per_call_end = result_end.tags["call_end"];
-    format.section_start = result.tags["sec_start"];
-    format.section_end = result_end.tags["sec_end"];
+    format.per_call_end   = result_end.tags["call_end"];
+    format.section_start  = result.tags["sec_start"];
+    format.section_end    = result_end.tags["sec_end"];
 }
 
 void analyze_tools::check_per_call_markers() {
     json assistant_one_tool = json{
-        { "role",       "assistant" },
-        { "content",    ""          },
+        { "role",       "assistant"                      },
+        { "content",    ""                               },
         { "tool_calls", json::array({ first_tool_call }) }
     };
 
     json assistant_two_tools = json{
-        { "role",       "assistant" },
-        { "content",    ""          },
+        { "role",       "assistant"                                        },
+        { "content",    ""                                                 },
         { "tool_calls", json::array({ first_tool_call, second_tool_call }) }
     };
 
@@ -836,8 +870,7 @@ void analyze_tools::check_per_call_markers() {
     diff_split filter_common_call_part = calculate_diff_split(one_vs_two->diff.suffix, one_vs_two->diff.right);
 
     std::string second_tool_content = trim_leading_whitespace(filter_common_call_part.right);
-    if (!format.section_start.empty() &&
-        second_tool_content.find(format.section_start) == 0) {
+    if (!format.section_start.empty() && second_tool_content.find(format.section_start) == 0) {
         format.per_call_start = format.section_start;
         format.per_call_end   = format.section_end;
         format.section_start.clear();
@@ -887,12 +920,11 @@ void analyze_tools::extract_function_markers() {
             prefix_marker = format.section_start;
         }
         if (!prefix_marker.empty() && diff.prefix.rfind(prefix_marker) != std::string::npos) {
-            function.name_prefix =
-                diff.prefix.substr(diff.prefix.rfind(prefix_marker) + prefix_marker.size());
+            function.name_prefix = diff.prefix.substr(diff.prefix.rfind(prefix_marker) + prefix_marker.size());
         }
 
         // Extract name prefix/suffix from diff.left (stop at the next marker boundary)
-        auto name_parser = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
+        auto name_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
             return p.tag("pre", p.until(FUN_FIRST)) + p.literal(FUN_FIRST) +
                    p.tag("post", p.zero_or_more(p.negate(p.marker()) + p.any()));
         });
@@ -907,21 +939,21 @@ void analyze_tools::extract_function_markers() {
             // For JSON: name_suffix extends to the first non-marker { or [, including any
             // markers along the way. Only applies if there's at least one marker after
             // the JSON content (matching the original "stop < seg_suf.size() - 1" guard).
-            auto suffix_parser = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
-                auto non_json = p.marker() | (p.negate(p.literal("{")) + p.negate(p.literal("[")) + p.any());
+            auto suffix_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+                auto non_json   = p.marker() | (p.negate(p.literal("{")) + p.negate(p.literal("[")) + p.any());
                 auto after_json = p.zero_or_more(p.negate(p.marker()) + p.any()) + p.marker();
                 return p.tag("ext", p.zero_or_more(non_json)) + after_json;
             });
-            auto suf_result = suffix_parser.parse_and_extract(diff.suffix);
+            auto suf_result    = suffix_parser.parse_and_extract(diff.suffix);
             if (suf_result.result.success()) {
                 function.name_suffix += suf_result.tags["ext"];
             }
         } else {
             // For tagged: name_suffix extends to the first marker (arg marker)
-            auto suffix_parser = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
+            auto suffix_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
                 return p.tag("ext", p.zero_or_more(p.negate(p.marker()) + p.any()));
             });
-            auto suf_result = suffix_parser.parse_and_extract(diff.suffix);
+            auto suf_result    = suffix_parser.parse_and_extract(diff.suffix);
             if (suf_result.result.success()) {
                 function.name_suffix += suf_result.tags["ext"];
             }
@@ -949,24 +981,23 @@ void analyze_tools::extract_function_markers() {
         if (!closer_suffix.empty()) {
             if (format.mode == tool_format::TAG_WITH_TAGGED) {
                 // After last arg value, skip the closing arg marker, rest is closer
-                auto closer_parser = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
-                    return p.until("YYYY") + p.literal("YYYY") + p.space() +
-                           p.marker() + p.space() +
+                auto closer_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+                    return p.until("YYYY") + p.literal("YYYY") + p.space() + p.marker() + p.space() +
                            p.tag("close", p.rest());
                 });
-                auto close_result = closer_parser.parse_and_extract(closer_suffix);
+                auto close_result  = closer_parser.parse_and_extract(closer_suffix);
                 if (close_result.result.success()) {
                     function.close = close_result.tags["close"];
                 }
             } else if (format.mode == tool_format::TAG_WITH_JSON) {
                 // After last arg value, find end of JSON args, rest is closer
-                auto closer_parser = build_tagged_peg_parser([&](common_peg_parser_builder &p) {
+                auto closer_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
                     return p.until("YYYY") + p.literal("YYYY") + p.tag("post_val", p.rest());
                 });
-                auto close_result = closer_parser.parse_and_extract(closer_suffix);
+                auto close_result  = closer_parser.parse_and_extract(closer_suffix);
                 if (close_result.result.success()) {
                     const auto & post = close_result.tags["post_val"];
-                    size_t pos = post.find_last_of("}]");
+                    size_t       pos  = post.find_last_of("}]");
                     if (pos != std::string::npos && pos < post.size() - 1) {
                         function.close = trim_leading_whitespace(post.substr(pos + 1));
                     }
@@ -986,14 +1017,14 @@ void analyze_tools::analyze_arguments() {
 
 void analyze_tools::extract_argument_name_markers() {
     json assistant_first_arg = json{
-        { "role",       "assistant" },
-        { "content",    ""          },
+        { "role",       "assistant"                              },
+        { "content",    ""                                       },
         { "tool_calls", json::array({ first_tool_call_one_arg }) }
     };
 
     json assistant_second_arg = json{
-        { "role",       "assistant" },
-        { "content",    ""          },
+        { "role",       "assistant"                                },
+        { "content",    ""                                         },
         { "tool_calls", json::array({ first_tool_call_other_arg }) }
     };
 
@@ -1015,42 +1046,40 @@ void analyze_tools::extract_argument_name_markers() {
 
     if (!diff.left.empty() && !diff.right.empty()) {
         // Parse both sides to find ARG_FIRST/ARG_SECOND and extract the surrounding structure
-        auto left_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+        auto left_parser  = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
             return p.tag("pre", p.until(ARG_FIRST)) + p.literal(ARG_FIRST) +
-                   p.tag("suffix", p.until_one_of({"\"", "X"}));
+                   p.tag("suffix", p.until_one_of({ "\"", "X" }));
         });
         auto right_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
             return p.tag("pre", p.until(ARG_SECOND)) + p.literal(ARG_SECOND) +
-                   p.tag("suffix", p.until_one_of({"\"", "Y"}));
+                   p.tag("suffix", p.until_one_of({ "\"", "Y" }));
         });
         auto left_result  = left_parser.parse_anywhere_and_extract(diff.left);
         auto right_result = right_parser.parse_anywhere_and_extract(diff.right);
 
-        if (left_result.result.success() && right_result.result.success() &&
-            !left_result.tags["pre"].empty() &&
+        if (left_result.result.success() && right_result.result.success() && !left_result.tags["pre"].empty() &&
             left_result.tags["pre"] == right_result.tags["pre"] &&
             left_result.tags["suffix"] == right_result.tags["suffix"]) {
             // Name is inside a structure (e.g., JSON key): prefix is the shared wrapper
             arguments.name_prefix = trim_whitespace(left_result.tags["pre"]);
             arguments.name_suffix = trim_leading_whitespace(left_result.tags["suffix"]);
-        } else if (diff.left.substr(0, ARG_FIRST.length()) == ARG_FIRST && diff.right.substr(0, ARG_SECOND.length()) == ARG_SECOND) {
+        } else if (diff.left.substr(0, ARG_FIRST.length()) == ARG_FIRST &&
+                   diff.right.substr(0, ARG_SECOND.length()) == ARG_SECOND) {
             // Name is directly in the diff: prefix comes from last marker in diff.prefix
-            auto pre_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+            auto pre_parser       = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
                 auto last_marker = p.marker() + p.zero_or_more(p.negate(p.marker()) + p.any()) + p.end();
                 return p.zero_or_more(p.negate(last_marker) + p.any()) + p.tag("name_prefix", last_marker);
             });
-            auto pre_result = pre_parser.parse_and_extract(diff.prefix);
-            arguments.name_prefix = pre_result.result.success()
-                ? pre_result.tags["name_prefix"] : diff.prefix;
+            auto pre_result       = pre_parser.parse_and_extract(diff.prefix);
+            arguments.name_prefix = pre_result.result.success() ? pre_result.tags["name_prefix"] : diff.prefix;
 
             // Suffix extends from after ARG_FIRST to the first marker (+ optional whitespace).
             // The marker could be in diff.left itself or in diff.suffix, so we concatenate.
-            std::string after_first = diff.left.substr(ARG_FIRST.length()) + diff.suffix;
-            auto suffix_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
-                return p.tag("suffix", p.zero_or_more(p.negate(p.marker()) + p.any()) +
-                                       p.marker() + p.space());
+            std::string after_first   = diff.left.substr(ARG_FIRST.length()) + diff.suffix;
+            auto        suffix_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+                return p.tag("suffix", p.zero_or_more(p.negate(p.marker()) + p.any()) + p.marker() + p.space());
             });
-            auto suf_result = suffix_parser.parse_anywhere_and_extract(after_first);
+            auto        suf_result    = suffix_parser.parse_anywhere_and_extract(after_first);
             if (suf_result.result.success()) {
                 arguments.name_suffix = suf_result.tags["suffix"];
             }
@@ -1095,11 +1124,11 @@ void analyze_tools::extract_argument_value_markers() {
         }
         if (!prefix.empty()) {
             // Find the last marker + any trailing non-marker text to end
-            auto prefix_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+            auto prefix_parser     = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
                 auto last_marker = p.marker() + p.zero_or_more(p.negate(p.marker()) + p.any()) + p.end();
                 return p.zero_or_more(p.negate(last_marker) + p.any()) + p.tag("val_prefix", last_marker);
             });
-            auto pre_result = prefix_parser.parse_and_extract(prefix);
+            auto pre_result        = prefix_parser.parse_and_extract(prefix);
             arguments.value_prefix = pre_result.result.success() ? pre_result.tags["val_prefix"] : prefix;
         }
 
@@ -1110,9 +1139,8 @@ void analyze_tools::extract_argument_value_markers() {
                 value_suffix = value_suffix.substr(0, func_close_pos);
             }
         } else if (!format.per_call_end.empty() || !format.section_end.empty()) {
-            std::string end_marker =
-                !format.per_call_end.empty() ? format.per_call_end : format.section_end;
-            size_t end_marker_pos = value_suffix.find(end_marker);
+            std::string end_marker     = !format.per_call_end.empty() ? format.per_call_end : format.section_end;
+            size_t      end_marker_pos = value_suffix.find(end_marker);
             if (end_marker_pos != std::string::npos) {
                 value_suffix = value_suffix.substr(0, end_marker_pos);
             }
@@ -1126,14 +1154,14 @@ void analyze_tools::extract_argument_value_markers() {
 
 void analyze_tools::extract_argument_separator() {
     json assistant_one_arg = json{
-        { "role",       "assistant" },
-        { "content",    ""          },
+        { "role",       "assistant"                              },
+        { "content",    ""                                       },
         { "tool_calls", json::array({ first_tool_call_one_arg }) }
     };
 
     json assistant_two_args = json{
-        { "role",       "assistant" },
-        { "content",    ""          },
+        { "role",       "assistant"                      },
+        { "content",    ""                               },
         { "tool_calls", json::array({ first_tool_call }) }
     };
 
@@ -1154,21 +1182,21 @@ void analyze_tools::extract_argument_separator() {
     const auto & diff = comparison->diff;
 
     if (!diff.right.empty()) {
-        std::string separator        = until_common_prefix(diff.right, ARG_FIRST, ARG_SECOND);
-        arguments.separator = separator;
+        std::string separator = until_common_prefix(diff.right, ARG_FIRST, ARG_SECOND);
+        arguments.separator   = separator;
     }
 }
 
 void analyze_tools::extract_args_markers() {
     json assistant_no_args = json{
-        { "role",       "assistant"},
-        { "content",    ""         },
+        { "role",       "assistant"                                },
+        { "content",    ""                                         },
         { "tool_calls", json::array({ first_tool_call_zero_args }) }
     };
 
     json assistant_with_args = json{
-        { "role",       "assistant"},
-        { "content",    ""         },
+        { "role",       "assistant"                              },
+        { "content",    ""                                       },
         { "tool_calls", json::array({ first_tool_call_one_arg }) }
     };
 
@@ -1192,8 +1220,8 @@ void analyze_tools::extract_args_markers() {
         std::string prefix_marker = !format.section_start.empty() ? format.section_start : format.per_call_start;
         std::string suffix_marker = !format.section_end.empty() ? format.section_end : format.per_call_end;
         // these might happen earlier in the tools section as an example or somewhere else, so we need to find the closest ones
-        size_t prefix_pos = prefix_marker.empty() ? 0 : diff.prefix.rfind(prefix_marker);
-        size_t suffix_pos = suffix_marker.empty() ? diff.suffix.size() : diff.suffix.find(suffix_marker);
+        size_t      prefix_pos    = prefix_marker.empty() ? 0 : diff.prefix.rfind(prefix_marker);
+        size_t      suffix_pos    = suffix_marker.empty() ? diff.suffix.size() : diff.suffix.find(suffix_marker);
         if (prefix_pos == std::string::npos) {
             prefix_pos = 0;
         }
@@ -1208,7 +1236,8 @@ void analyze_tools::extract_args_markers() {
         if (!args_start.empty() || !args_end.empty()) {
             size_t find_fun = args_start.find(FUN_FIRST);
             if (find_fun != std::string::npos) {
-                args_start = args_start.substr(find_fun + FUN_FIRST.size(), args_start.size() - find_fun - FUN_FIRST.size());
+                args_start =
+                    args_start.substr(find_fun + FUN_FIRST.size(), args_start.size() - find_fun - FUN_FIRST.size());
             }
             arguments.start = args_start;
             arguments.end   = args_end;
@@ -1218,14 +1247,14 @@ void analyze_tools::extract_args_markers() {
 
 void analyze_tools::extract_call_id_markers() {
     json assistant_id1 = json{
-        { "role",       "assistant" },
+        { "role",       "assistant"                      },
         { "content",    ""                               },
         { "tool_calls", json::array({ first_tool_call }) }
     };
 
     json assistant_id2 = json{
-        { "role",       "assistant" },
-        { "content",    ""          },
+        { "role",       "assistant"                             },
+        { "content",    ""                                      },
         { "tool_calls", json::array({ first_tool_call_alt_id }) }
     };
 
@@ -1274,16 +1303,14 @@ void analyze_tools::extract_call_id_markers() {
             auto last = p.marker() + p.zero_or_more(p.negate(p.marker()) + p.any()) + p.end();
             return p.zero_or_more(p.negate(last) + p.any()) + p.tag("m", p.marker());
         });
-        auto res = parser.parse_anywhere_and_extract(str);
+        auto res    = parser.parse_anywhere_and_extract(str);
         return res.result.success() ? res.tags["m"] : "";
     };
 
     // Helper: find the first marker in a string
     auto find_first_marker = [](const std::string & str) -> std::string {
-        auto parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
-            return p.tag("m", p.marker());
-        });
-        auto res = parser.parse_anywhere_and_extract(str);
+        auto parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) { return p.tag("m", p.marker()); });
+        auto res    = parser.parse_anywhere_and_extract(str);
         return res.result.success() ? res.tags["m"] : "";
     };
 
@@ -1299,13 +1326,13 @@ void analyze_tools::extract_call_id_markers() {
             call_id.pos = call_id_position::BETWEEN_FUNC_AND_ARGS;
 
             // Find call_id_prefix: marker immediately preceding common_id_part (no intervening markers)
-            std::string after_func = diff.prefix.substr(func_name_in_prefix + func_name.length());
-            auto id_prefix_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
+            std::string after_func       = diff.prefix.substr(func_name_in_prefix + func_name.length());
+            auto        id_prefix_parser = build_tagged_peg_parser([&](common_peg_parser_builder & p) {
                 return p.tag("prefix", p.marker()) +
                        p.zero_or_more(p.negate(p.marker()) + p.negate(p.literal(common_id_part)) + p.any()) +
                        p.literal(common_id_part);
             });
-            auto id_res = id_prefix_parser.parse_anywhere_and_extract(after_func);
+            auto        id_res           = id_prefix_parser.parse_anywhere_and_extract(after_func);
             if (id_res.result.success()) {
                 call_id.prefix = id_res.tags["prefix"];
             } else {
@@ -1318,7 +1345,7 @@ void analyze_tools::extract_call_id_markers() {
                 return p.zero_or_more(p.negate(p.marker()) + p.negate(p.literal("{")) + p.any()) +
                        p.tag("suffix", p.marker());
             });
-            auto suf_res = suffix_parser.parse_anywhere_and_extract(diff.suffix);
+            auto suf_res       = suffix_parser.parse_anywhere_and_extract(diff.suffix);
             if (suf_res.result.success()) {
                 call_id.suffix = suf_res.tags["suffix"];
             }
@@ -1331,7 +1358,7 @@ void analyze_tools::extract_call_id_markers() {
             size_t      closing_brace = after_args.rfind('}');
             if (closing_brace != std::string::npos) {
                 std::string between_args_and_id = after_args.substr(closing_brace + 1);
-                call_id.prefix = find_last_marker(between_args_and_id);
+                call_id.prefix                  = find_last_marker(between_args_and_id);
             }
 
             // call_id_suffix: first marker in diff.suffix
@@ -1346,7 +1373,7 @@ void analyze_tools::extract_call_id_markers() {
 
         // call_id_suffix: first marker in the portion of diff.suffix before func_name
         std::string before_func = diff.suffix.substr(0, func_name_in_suffix);
-        call_id.suffix = find_first_marker(before_func);
+        call_id.suffix          = find_first_marker(before_func);
     }
 
     // When call_id is detected, per_call_end may have been incorrectly set to include

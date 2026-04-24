@@ -216,12 +216,14 @@ struct tool_id_analysis {
 
 struct analyze_content;
 
+struct analyze_reasoning;
 struct parser_build_context {
     common_chat_peg_builder & p;
     const generation_params &          inputs;
     common_peg_parser                 reasoning_parser;
     bool                              extracting_reasoning = false;
     const analyze_content *           content              = nullptr;
+    const analyze_reasoning *         reasoning            = nullptr;
 
     parser_build_context(common_chat_peg_builder & p, const generation_params & inputs);
 };
