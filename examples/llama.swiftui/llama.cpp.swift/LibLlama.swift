@@ -97,17 +97,9 @@ actor LlamaContext {
             result.deallocate()
         }
 
-        // TODO: this is probably very stupid way to get the string from C
+        _ = llama_model_desc(model, result, 256)
 
-        let nChars = llama_model_desc(model, result, 256)
-        let bufferPointer = UnsafeBufferPointer(start: result, count: Int(nChars))
-
-        var SwiftString = ""
-        for char in bufferPointer {
-            SwiftString.append(Character(UnicodeScalar(UInt8(char))))
-        }
-
-        return SwiftString
+        return String(cString: result)
     }
 
     func get_n_tokens() -> Int32 {
