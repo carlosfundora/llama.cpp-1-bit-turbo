@@ -776,3 +776,4 @@ export GPU_TARGETS=gfx1030               # Build target
 cmake -B build -DGGML_HIP=ON -DGPU_TARGETS=gfx1030 -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 ```
+<!-- Added END_DELIMITED to docs -->
