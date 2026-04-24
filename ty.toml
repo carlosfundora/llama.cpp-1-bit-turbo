@@ -28,3 +28,16 @@ include = [
 [overrides.rules]
 unsupported-operator = "ignore"
 not-subscriptable = "ignore"
+
+
+[[overrides]]
+include = [
+    "**/*.py"
+]
+
+[overrides.rules]
+unresolved-import = "ignore"
+
+
+unused-ignore-comment = "ignore"
+unused-type-ignore-comment = "ignore"
