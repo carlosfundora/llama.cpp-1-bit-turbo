@@ -29,7 +29,7 @@ parser_build_context::parser_build_context(common_chat_peg_builder & p, const ge
     inputs(inputs),
     reasoning_parser(p.eps()) {}
 
-common_chat_params peg_generator::generate_parser(const common_chat_template &    tmpl,
+common_chat_params peg_generator::generate_parser(const common_chat_template &     tmpl,
                                                   const struct generation_params & inputs) {
     // Run differential analysis to extract template structure
     struct autoparser autoparser;
@@ -37,9 +37,9 @@ common_chat_params peg_generator::generate_parser(const common_chat_template &  
     return generate_parser(tmpl, inputs, autoparser);
 }
 
-common_chat_params peg_generator::generate_parser(const common_chat_template &    tmpl,
+common_chat_params peg_generator::generate_parser(const common_chat_template &     tmpl,
                                                   const struct generation_params & inputs,
-                                                  const autoparser &              autoparser) {
+                                                  const autoparser &               autoparser) {
     // Create the result structure
     common_chat_params data;
     data.prompt           = common_chat_template_direct_apply(tmpl, inputs);
@@ -52,13 +52,15 @@ common_chat_params peg_generator::generate_parser(const common_chat_template &  
     // Build grammar if tools are present
     bool has_tools =
         autoparser.tools.format.mode != tool_format::NONE && inputs.tools.is_array() && !inputs.tools.empty();
-    std::string trigger_marker = !autoparser.tools.format.section_start.empty() ? autoparser.tools.format.section_start :
-                                                                                  autoparser.tools.format.per_call_start;
+    std::string trigger_marker = !autoparser.tools.format.section_start.empty() ?
+                                     autoparser.tools.format.section_start :
+                                     autoparser.tools.format.per_call_start;
 
     bool has_response_format = !inputs.json_schema.empty() && inputs.json_schema.is_object();
-    bool include_grammar = has_response_format || (has_tools &&
-            ((inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_AUTO && !trigger_marker.empty()) ||
-              inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_REQUIRED));
+    bool include_grammar =
+        has_response_format ||
+        (has_tools && ((inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_AUTO && !trigger_marker.empty()) ||
+                       inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_REQUIRED));
 
     if (include_grammar) {
         data.grammar_lazy = !has_response_format && inputs.tool_choice == COMMON_CHAT_TOOL_CHOICE_AUTO;
@@ -84,7 +86,8 @@ common_chat_params peg_generator::generate_parser(const common_chat_template &  
 
 common_peg_arena autoparser::build_parser(const generation_params & inputs) const {
     if (!analysis_complete) {
-        throw std::invalid_argument("Cannot call build_parser on autoparser without performing analysis first, call analyze_template(...)");
+        throw std::invalid_argument(
+            "Cannot call build_parser on autoparser without performing analysis first, call analyze_template(...)");
     }
     return build_chat_peg_parser([&](common_chat_peg_builder & p) {
         parser_build_context ctx(p, inputs);
@@ -92,6 +95,7 @@ common_peg_arena autoparser::build_parser(const generation_params & inputs) cons
 
         ctx.extracting_reasoning = extract_reasoning && reasoning.mode != reasoning_mode::NONE;
         ctx.content              = &content;
+        ctx.reasoning            = &reasoning;
 
         // Build reasoning parser
         ctx.reasoning_parser = reasoning.build_parser(ctx);
@@ -103,19 +107,21 @@ common_peg_arena autoparser::build_parser(const generation_params & inputs) cons
         bool pure_content        = reasoning.mode == reasoning_mode::NONE;
 
         if (has_response_format) {
-            auto response_format = p.rule("response-format", p.content(p.schema(p.json(), "response-format-schema", inputs.json_schema)));
-            parser = ctx.reasoning_parser + p.space() + p.choice({
-                p.literal("```json") + p.space() + response_format + p.space() + p.literal("```"),
-                response_format
-            }) + p.end();
+            auto response_format =
+                p.rule("response-format", p.content(p.schema(p.json(), "response-format-schema", inputs.json_schema)));
+            parser = ctx.reasoning_parser + p.space() +
+                     p.choice({ p.literal("```json") + p.space() + response_format + p.space() + p.literal("```"),
+                                response_format }) +
+                     p.end();
             pure_content = false;
         } else if (has_tools && inputs.tool_choice != COMMON_CHAT_TOOL_CHOICE_NONE && jinja_caps.supports_tool_calls) {
-            parser = tools.build_parser(ctx);
+            parser       = tools.build_parser(ctx);
             pure_content = false;
         } else {
             parser = content.build_parser(ctx);
         }
-        return pure_content ? p.prefix(inputs.generation_prompt, reasoning.start) + parser : p.prefix(inputs.generation_prompt, reasoning.start) << parser;
+        return pure_content ? p.prefix(inputs.generation_prompt, reasoning.start) + parser :
+                              p.prefix(inputs.generation_prompt, reasoning.start) << parser;
     });
 }
 
@@ -172,8 +178,11 @@ common_peg_parser analyze_tools::build_parser(parser_build_context & ctx) const 
         case tool_format::TAG_WITH_GEMMA4_DICT:
             return build_tool_parser_tag_gemma4_dict(ctx);
         default:
-            LOG_ERR("[ERROR] Template seems to support tool calls, but failed to determine tool format. Tool calling will not work properly. "
-                "Check for a fixed template for your model in the models/templates directory of your llama.cpp installation or "
+            LOG_ERR(
+                "[ERROR] Template seems to support tool calls, but failed to determine tool format. Tool calling will "
+                "not work properly. "
+                "Check for a fixed template for your model in the models/templates directory of your llama.cpp "
+                "installation or "
                 "report an issue at https://github.com/ggml-org/llama.cpp/issues\n");
             return ctx.p.eps();
     }
@@ -349,32 +358,36 @@ common_peg_parser analyze_tools::build_tool_parser_tag_tagged(parser_build_conte
 
         // Build call_id parser based on position (if supported)
         common_peg_parser call_id_section = p.eps();
-        bool have_call_id = false;
+        bool              have_call_id    = false;
         if (call_id.pos == call_id_position::BETWEEN_FUNC_AND_ARGS && !call_id.prefix.empty() &&
             !call_id.suffix.empty()) {
-            have_call_id = true;
+            have_call_id    = true;
             call_id_section = p.optional(call_id.prefix + p.tool_id(p.until(call_id.suffix)) + call_id.suffix);
         }
 
-        bool matched_atomic = false;
-        common_peg_parser func_parser = p.eps();
+        bool              matched_atomic = false;
+        common_peg_parser func_parser    = p.eps();
         if (!function.name_suffix.empty()) {
             func_parser = p.tool_open(function.name_prefix + p.tool_name(p.literal(name)) + function.name_suffix) +
-                call_id_section + p.space() + args_seq;
+                          call_id_section + p.space() + args_seq;
             matched_atomic = true;
         } else if (have_call_id) {
-            func_parser = p.atomic(p.tool_open(function.name_prefix + p.tool_name(p.literal(name)) + function.name_suffix) +
-                call_id_section) + p.space() + args_seq;
+            func_parser =
+                p.atomic(p.tool_open(function.name_prefix + p.tool_name(p.literal(name)) + function.name_suffix) +
+                         call_id_section) +
+                p.space() + args_seq;
             matched_atomic = true;
         } else if (!arguments.name_prefix.empty() && !required_parsers.empty()) {
             // Only peek for an arg tag when there are required args that must follow.
             // When all args are optional, the model may emit no arg tags at all (#20650).
-            func_parser = p.atomic(p.tool_open(function.name_prefix + p.tool_name(p.literal(name)) + function.name_suffix) +
-                call_id_section + p.space() + p.peek(p.literal(arguments.name_prefix))) + args_seq;
+            func_parser =
+                p.atomic(p.tool_open(function.name_prefix + p.tool_name(p.literal(name)) + function.name_suffix) +
+                         call_id_section + p.space() + p.peek(p.literal(arguments.name_prefix))) +
+                args_seq;
             matched_atomic = true;
         } else {
             func_parser = p.tool_open(function.name_prefix + p.tool_name(p.literal(name)) + function.name_suffix) +
-                call_id_section + p.space() + args_seq;
+                          call_id_section + p.space() + args_seq;
         }
 
         if (!function.close.empty()) {
@@ -452,10 +465,9 @@ common_peg_parser analyze_tools::build_tool_parser_tag_gemma4_dict(parser_build_
 
         if (!params.contains("properties") || !params.at("properties").is_object()) {
             // No arguments - just match the function name with empty braces
-            auto func_parser = p.atomic(
-                p.tool_open(p.literal(function.name_prefix) + p.tool_name(p.literal(name)) + p.literal("{")) +
-                p.tool_args(p.eps()) +
-                p.tool_close(p.literal("}")));
+            auto func_parser =
+                p.atomic(p.tool_open(p.literal(function.name_prefix) + p.tool_name(p.literal(name)) + p.literal("{")) +
+                         p.tool_args(p.eps()) + p.tool_close(p.literal("}")));
             tool_choice |= p.rule("tool-" + name, func_parser);
             return;
         }
@@ -474,35 +486,34 @@ common_peg_parser analyze_tools::build_tool_parser_tag_gemma4_dict(parser_build_
         std::vector<arg_entry> arg_entries;
 
         for (const auto & [param_name, param_schema] : properties.items()) {
-            std::string type    = "object";
-            auto        type_v  = param_schema.contains("type") ? param_schema.at("type") : json::object();
-            if (type_v.is_string()) type_v.get_to(type);
+            std::string type   = "object";
+            auto        type_v = param_schema.contains("type") ? param_schema.at("type") : json::object();
+            if (type_v.is_string()) {
+                type_v.get_to(type);
+            }
 
             common_peg_parser value_parser = p.eps();
             if (type == "string") {
                 // String values are delimited by <|"|>...<|"|>
                 value_parser =
                     p.literal(QUOTE) +
-                    p.tool_arg_string_value(p.schema(p.until(QUOTE),
-                        "tool-" + name + "-arg-" + param_name + "-schema", param_schema, true)) +
+                    p.tool_arg_string_value(p.schema(p.until(QUOTE), "tool-" + name + "-arg-" + param_name + "-schema",
+                                                     param_schema, true)) +
                     p.literal(QUOTE);
             } else {
                 // Numbers, booleans: raw text up to the next comma or closing brace
-                value_parser = p.tool_arg_value(p.until_one_of({",", "}"}));
+                value_parser = p.tool_arg_value(p.until_one_of({ ",", "}" }));
             }
 
-            auto arg = p.tool_arg(
-                p.tool_arg_open(p.tool_arg_name(p.literal(param_name)) + p.literal(":")) +
-                value_parser +
-                p.tool_arg_close(p.eps()));
+            auto arg = p.tool_arg(p.tool_arg_open(p.tool_arg_name(p.literal(param_name)) + p.literal(":")) +
+                                  value_parser + p.tool_arg_close(p.eps()));
 
-            arg_entries.push_back({param_name, p.rule("tool-" + name + "-arg-" + param_name, arg)});
+            arg_entries.push_back({ param_name, p.rule("tool-" + name + "-arg-" + param_name, arg) });
         }
 
         // Sort alphabetically to match Jinja's dictsort
-        std::sort(arg_entries.begin(), arg_entries.end(), [](const auto & a, const auto & b) {
-            return a.param_name < b.param_name;
-        });
+        std::sort(arg_entries.begin(), arg_entries.end(),
+                  [](const auto & a, const auto & b) { return a.param_name < b.param_name; });
 
         // Build arg sequence: any arg, then zero-or-more comma-separated additional args
         common_peg_parser args_seq = p.eps();
@@ -511,15 +522,13 @@ common_peg_parser analyze_tools::build_tool_parser_tag_gemma4_dict(parser_build_
             for (auto & entry : arg_entries) {
                 any_arg |= entry.parser;
             }
-            args_seq = p.optional(
-                any_arg + p.repeat(p.literal(",") + any_arg, 0, (int) arg_entries.size() - 1));
+            args_seq = p.optional(any_arg + p.repeat(p.literal(",") + any_arg, 0, (int) arg_entries.size() - 1));
         }
 
         // Full parser: call:name{args}
-        auto func_parser = p.atomic(
-            p.tool_open(p.literal(function.name_prefix) + p.tool_name(p.literal(name)) + p.literal("{")) +
-            p.tool_args(args_seq) +
-            p.tool_close(p.literal("}")));
+        auto func_parser =
+            p.atomic(p.tool_open(p.literal(function.name_prefix) + p.tool_name(p.literal(name)) + p.literal("{")) +
+                     p.tool_args(args_seq) + p.tool_close(p.literal("}")));
 
         tool_choice |= p.rule("tool-" + name, func_parser);
     });
@@ -539,9 +548,8 @@ common_peg_parser analyze_tools::build_tool_parser_tag_gemma4_dict(parser_build_
     }
 
     auto content_before_tools = p.until(format.per_call_start);
-    return ctx.reasoning_parser +
-           (force_tools ? p.eps() : p.optional(p.content(content_before_tools))) +
-           tool_calls + p.end();
+    return ctx.reasoning_parser + (force_tools ? p.eps() : p.optional(p.content(content_before_tools))) + tool_calls +
+           p.end();
 }
 
 }  // namespace autoparser

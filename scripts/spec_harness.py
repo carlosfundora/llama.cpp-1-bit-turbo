@@ -108,14 +108,14 @@ def rms_norm(x, w, eps=1e-6):
 def eagle3_decoder_forward(tensors, token_id, g_embd, kv_cache=None, position=0):
     """
     Full EAGLE3 decoder forward pass (1-layer transformer).
-    
+
     Args:
         tensors: dict of safetensors weights
         token_id: current token ID (int)
         g_embd: g_embeddings tensor [n_embd]
         kv_cache: optional dict with 'K' and 'V' tensors [n_kv_heads, seq_len, head_dim]
         position: absolute position for RoPE
-    
+
     Returns:
         logits: [vocab_size] tensor
         new_kv_cache: updated KV cache
@@ -210,17 +210,17 @@ def eagle3_decoder_forward(tensors, token_id, g_embd, kv_cache=None, position=0)
 def validate(header, records, eagle3_path, with_kv_history=False):
     """
     Validate EAGLE3 decoder against ground-truth next tokens.
-    
+
     Tests the full pipeline: features → FC → decoder → prediction.
     """
     import safetensors.torch as st
-    
+
     print(f"Loading EAGLE3 model from {eagle3_path}...")
     tensors = st.load_file(str(eagle3_path / 'model.safetensors'))
-    
+
     n_embd = header['n_embd']
     fc_weight = tensors['fc.weight'].float()  # [2560, 7680]
-    
+
     print(f"FC weight shape: {fc_weight.shape}")
     print(f"Using embed_tokens as lm_head (lm_head is untrained)")
     print(f"KV history: {'ENABLED' if with_kv_history else 'DISABLED (single-token, matches C++)'}")
@@ -230,7 +230,7 @@ def validate(header, records, eagle3_path, with_kv_history=False):
     top5_correct = 0
     top10_correct = 0
     total = len(records)
-    
+
     kv_cache = None
     spreads = []
     confidences = []
@@ -247,7 +247,7 @@ def validate(header, records, eagle3_path, with_kv_history=False):
         position = idx  # approximate absolute position
         if not with_kv_history:
             kv_cache = None  # reset each step (matches C++ Option A)
-        
+
         logits, kv_cache, prenorm = eagle3_decoder_forward(
             tensors, token_id, g_embd, kv_cache, position
         )
