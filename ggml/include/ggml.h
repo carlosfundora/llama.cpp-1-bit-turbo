@@ -173,6 +173,11 @@
 //
 //
 
+#if defined(__clang__) && defined(__HIP__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wignored-attributes"
+#endif
+
 #ifdef GGML_SHARED
 #    if defined(_WIN32) && !defined(__MINGW32__)
 #        ifdef GGML_BUILD
@@ -2776,4 +2781,8 @@ extern "C" {
 
 #ifdef  __cplusplus
 }
+#endif
+
+#if defined(__clang__) && defined(__HIP__)
+#pragma clang diagnostic pop
 #endif

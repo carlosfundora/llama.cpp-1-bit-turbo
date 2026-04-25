@@ -80,6 +80,7 @@ static __global__ void mul_mat_vec_f(
     }
 
     const int channel_bias = ids ? channel_x : channel_dst;
+    (void)channel_bias;
 
     if constexpr (has_fusion) {
         if (use_bias) {
@@ -95,6 +96,7 @@ static __global__ void mul_mat_vec_f(
     extern __shared__ char data_mmv[];
     float * buf_iw = (float *) data_mmv;
     float * buf_iw_gate = nullptr;
+    (void)buf_iw_gate;
     if constexpr (has_fusion) {
         buf_iw_gate = (float *) (data_mmv + warp_size*sizeof(float));
     }
@@ -123,6 +125,7 @@ static __global__ void mul_mat_vec_f(
     if constexpr (std::is_same_v<T, float>) {
         const float2 * x2 = (const float2 *) x;
         const float2 * gate_x2 = nullptr;
+        (void)gate_x2;
         if constexpr (has_fusion) {
             if (use_gate) {
                 gate_x2 = (const float2 *) gate_x;

@@ -5,6 +5,12 @@
 
 #include "ggml-webgpu.h"
 
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic ignored "-Wc++20-designator"
+#pragma GCC diagnostic ignored "-Wmissing-designated-field-initializers"
+#endif
+
+
 #include "ggml-backend-impl.h"
 #include "ggml-impl.h"
 #include "ggml-webgpu-shader-lib.hpp"
