@@ -32,6 +32,12 @@
 #include <string>
 #include <utility>
 #include <vector>
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wc++20-designator"
+#pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
+#endif
+
+
 
 #define ROUNDUP_POW2(x, pow2) (((x) + ((pow2) - 1)) & ~((pow2) - 1))
 #define CEIL_DIV(M, N)        (((M) + (N) - 1) / (N))

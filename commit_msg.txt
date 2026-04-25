@@ -1,0 +1,14 @@
+🔒 [security fix] Fix buffer overflow vulnerabilities in op-desc.h
+
+Also fixes several CI issues:
+- `ggml-cpu/ops.cpp`: Add missing switch cases for PLANAR/ISO quantization types
+- `ggml-cuda/mmvf.cu`: Fix unused variables
+- `ggml-quants.c`: Fix unused and uninitialized variables
+- `ggml-webgpu/ggml-webgpu.cpp`: Add pragmas for designated initializer warnings
+- `llama-context.h`: Remove unused private field
+- `common/common.cpp`: Fix signedness comparison warning for WEOF
+- `tests/test-rocm-hardening.cpp`: Fix missing `unistd.h` on Windows
+
+🎯 **What:** Fixed a potential buffer overflow and various compiler warnings/errors that broke CI.
+⚠️ **Risk:** The `op-desc.h` buffer overflow could lead to crashes or undefined behavior, while the compiler warnings/errors caused CI to fail across multiple platforms.
+🛡️ **Solution:** Replaced `sprintf` with `snprintf`, and addressed warning-as-error failures in CI (unused variables, missing headers, unhandled switch cases, sign comparison).
