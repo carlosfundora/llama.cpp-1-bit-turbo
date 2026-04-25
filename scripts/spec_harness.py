@@ -1,3 +1,6 @@
+import logging
+import logging
+import logging
 #!/usr/bin/env python3
 """
 spec_harness.py — Reusable speculative decoding validation tool.
@@ -18,7 +21,6 @@ Usage:
 
 import argparse
 import struct
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -75,28 +77,28 @@ def read_capture(path):
 
 def feature_stats(header, records):
     """Print feature statistics from a capture file."""
-    _n_embd = header['n_embd']
+    ____n_embd = header['n_embd']  # noqa: F841
     n_layers = header['n_layers']
     layer_ids = header['layer_ids']
 
-    print(f"=== Feature Statistics ({len(records)  # noqa: NP100} records) ===")
-    print(f"n_embd={n_embd}, n_layers={n_layers}, layers={layer_ids[:n_layers]}")  # noqa: NP100
-    print()
+    logging.info(f"=== Feature Statistics ({len(records)} records) ===")  # noqa: NP100
+    logging.info(f"n_embd={_n_embd}, n_layers={n_layers}, layers={layer_ids[:n_layers]}")  # noqa: NP100
+    logging.info()
 
-    all_feats = np.stack([r['features'] for r in records])  # [N, n_layers*n_embd]
+    all_feats = np.stack([r['features'] for r in records])  # [N, n_layers * n_embd]
 
     for i in range(n_layers):
-        layer_feats = all_feats[:, i*n_embd:(i+1)*n_embd]
-        print(f"Layer {layer_ids[i]}:")  # noqa: NP100
-        print(f"  mean={layer_feats.mean()  # noqa: NP100:.4f}  std={layer_feats.std():.4f}")
-        print(f"  min={layer_feats.min()  # noqa: NP100:.4f}   max={layer_feats.max():.4f}")
-        print(f"  per-token norms: mean={np.linalg.norm(layer_feats, axis=1)  # noqa: NP100.mean():.2f}")
-        print()
+        layer_feats = all_feats[:, i * n_embd:(i + 1) * n_embd]
+        logging.info(f"Layer {layer_ids[i]}:")  # noqa: NP100
+        logging.info(f"  mean={layer_feats.mean():.4f}  std={layer_feats.std():.4f}")  # noqa: NP100
+        logging.info(f"  min={layer_feats.min():.4f}   max={layer_feats.max():.4f}")  # noqa: NP100
+        logging.info(f"  per-token norms: mean={np.linalg.norm(layer_feats, axis=1).mean():.2f}")  # noqa: NP100
+        logging.info()
 
     # Combined features
-    print(f"Combined ({n_layers}×{n_embd} = {n_layers*n_embd})  # noqa: NP100:")
-    print(f"  mean={all_feats.mean()  # noqa: NP100:.4f}  std={all_feats.std():.4f}")
-    print(f"  min={all_feats.min()  # noqa: NP100:.4f}   max={all_feats.max():.4f}")
+    logging.info(f"Combined ({n_layers}×{n_embd} = {n_layers * n_embd}):")  # noqa: NP100
+    logging.info(f"  mean={all_feats.mean():.4f}  std={all_feats.std():.4f}")  # noqa: NP100
+    logging.info(f"  min={all_feats.min():.4f}   max={all_feats.max():.4f}")  # noqa: NP100
 
 
 def rms_norm(x, w, eps=1e-6):
@@ -121,7 +123,7 @@ def eagle3_decoder_forward(tensors, token_id, g_embd, kv_cache=None, position=0)
         new_kv_cache: updated KV cache
         prenorm: pre-norm hidden state for recurrence [n_embd]
     """
-    n_embd = 2560
+    n_embd = 2560  # noqa: F841
     n_heads = 32
     n_kv_heads = 8
     head_dim = 80
@@ -215,16 +217,16 @@ def validate(header, records, eagle3_path, with_kv_history=False):
     """
     import safetensors.torch as st
 
-    print(f"Loading EAGLE3 model from {eagle3_path}...")  # noqa: NP100
+    logging.info(f"Loading EAGLE3 model from {eagle3_path}...")  # noqa: NP100
     tensors = st.load_file(str(eagle3_path / 'model.safetensors'))
 
-    _n_embd = header['n_embd']
+    ____n_embd = header['n_embd']  # noqa: F841
     fc_weight = tensors['fc.weight'].float()  # [2560, 7680]
 
-    print(f"FC weight shape: {fc_weight.shape}")  # noqa: NP100
-    print(f"Using embed_tokens as lm_head (lm_head is untrained)  # noqa: NP100")
-    print(f"KV history: {'ENABLED' if with_kv_history else 'DISABLED (single-token, matches C++)  # noqa: NP100'}")
-    print()
+    logging.info(f"FC weight shape: {fc_weight.shape}")  # noqa: NP100
+    logging.info(f"Using embed_tokens as lm_head (lm_head is untrained)")  # noqa: NP100
+    logging.info(f"KV history: {'ENABLED' if with_kv_history else 'DISABLED (single-token, matches C++)'}")  # noqa: NP100
+    logging.info()
 
     top1_correct = 0
     top5_correct = 0
@@ -275,30 +277,30 @@ def validate(header, records, eagle3_path, with_kv_history=False):
         # Per-step output
         status = "✓" if predicted == next_token_id else "✗"
         in_top5 = "T5" if next_token_id in top5_ids else "  "
-        print(f"  [{idx:3d}] {status} {in_top5} | tok={token_id:6d} → "
+        logging.info(f"  [{idx:3d}] {status} {in_top5} | tok={token_id:6d} → "
               f"pred={predicted:6d} truth={next_token_id:6d} | "
               f"spread={spread:7.1f} conf={top_prob:.3f}")  # noqa: NP100
 
-    print()
-    print("=" * 70)  # noqa: NP100
-    print(f"=== Speculative Harness Report ===")  # noqa: NP100
-    print(f"=" * 70)  # noqa: NP100
-    print(f"EAGLE3 model:  {eagle3_path}")  # noqa: NP100
-    print(f"Records:       {total}")  # noqa: NP100
-    print(f"KV history:    {'Yes' if with_kv_history else 'No (single-token)  # noqa: NP100'}")
-    print()
-    print(f"Draft Accuracy:")  # noqa: NP100
-    print(f"  Top-1:  {top1_correct/total:6.1%} ({top1_correct}/{total})  # noqa: NP100")
-    print(f"  Top-5:  {top5_correct/total:6.1%} ({top5_correct}/{total})  # noqa: NP100")
-    print(f"  Top-10: {top10_correct/total:6.1%} ({top10_correct}/{total})  # noqa: NP100")
-    print()
-    print(f"Logit Diagnostics:")  # noqa: NP100
-    print(f"  Mean spread:     {np.mean(spreads)  # noqa: NP100:8.1f}")
-    print(f"  Min spread:      {np.min(spreads)  # noqa: NP100:8.1f}")
-    print(f"  Max spread:      {np.max(spreads)  # noqa: NP100:8.1f}")
-    print(f"  Mean confidence: {np.mean(confidences)  # noqa: NP100:8.4f}")
-    print(f"  Max confidence:  {np.max(confidences)  # noqa: NP100:8.4f}")
-    print()
+    logging.info()
+    logging.info("=" * 70)  # noqa: NP100
+    logging.info(f"=== Speculative Harness Report ===")  # noqa: NP100
+    logging.info("=" * 70)  # noqa: NP100
+    logging.info(f"EAGLE3 model:  {eagle3_path}")  # noqa: NP100
+    logging.info(f"Records:       {total}")  # noqa: NP100
+    logging.info(f"KV history:    {'Yes' if with_kv_history else 'No (single-token)'}")  # noqa: NP100
+    logging.info()
+    logging.info(f"Draft Accuracy:")  # noqa: NP100
+    logging.info(f"  Top-1:  {top1_correct / total:6.1%} ({top1_correct}/{total})")  # noqa: NP100
+    logging.info(f"  Top-5:  {top5_correct / total:6.1%} ({top5_correct}/{total})")  # noqa: NP100
+    logging.info(f"  Top-10: {top10_correct / total:6.1%} ({top10_correct}/{total})")  # noqa: NP100
+    logging.info()
+    logging.info(f"Logit Diagnostics:")  # noqa: NP100
+    logging.info(f"  Mean spread:     {np.mean(spreads):8.1f}")  # noqa: NP100
+    logging.info(f"  Min spread:      {np.min(spreads):8.1f}")  # noqa: NP100
+    logging.info(f"  Max spread:      {np.max(spreads):8.1f}")  # noqa: NP100
+    logging.info(f"  Mean confidence: {np.mean(confidences):8.4f}")  # noqa: NP100
+    logging.info(f"  Max confidence:  {np.max(confidences):8.4f}")  # noqa: NP100
+    logging.info()
 
     # Verdict
     top5_pct = top5_correct / total
@@ -307,23 +309,23 @@ def validate(header, records, eagle3_path, with_kv_history=False):
     if top5_pct < 0.05:
         verdict = "MODEL_UNDERTRAINED"
         explanation = ("The EAGLE3 model cannot predict next tokens even with perfect features. "
-                      "This is NOT a code bug — the model needs more training.")
+                            "This is NOT a code bug — the model needs more training.")
     elif top5_pct < 0.15:
         verdict = "MODEL_WEAK"
         explanation = ("The EAGLE3 model has some predictive ability but is too weak for "
-                      "useful speculative decoding. Consider retraining or finding better weights.")
+                            "useful speculative decoding. Consider retraining or finding better weights.")
     elif mean_spread < 10:
         verdict = "PIPELINE_BROKEN"
         explanation = ("Features or decoder weights are corrupted — logit spread is too low. "
-                      "Debug the C++ extraction/decoder pipeline.")
+                            "Debug the C++ extraction/decoder pipeline.")
     else:
         verdict = "MODEL_OK"
         explanation = ("The EAGLE3 model has meaningful predictive ability. "
-                      "If C++ speculative decoding still fails, the issue is in the C++ pipeline.")
+                            "If C++ speculative decoding still fails, the issue is in the C++ pipeline.")
 
-    print(f"Verdict: {verdict}")  # noqa: NP100
-    print(f"  {explanation}")  # noqa: NP100
-    print()
+    logging.info(f"Verdict: {verdict}")  # noqa: NP100
+    logging.info(f"  {explanation}")  # noqa: NP100
+    logging.info()
 
     return verdict
 
@@ -341,7 +343,7 @@ def main():
     p_val.add_argument('--capture', required=True, help='Path to capture .bin file')
     p_val.add_argument('--eagle3-model', required=True, help='Path to EAGLE3 HF model dir')
     p_val.add_argument('--with-kv-history', action='store_true',
-                        help='Accumulate KV cache across tokens (tests Option B behavior)')
+                            help='Accumulate KV cache across tokens (tests Option B behavior)')
 
     args = parser.parse_args()
 
