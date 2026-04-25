@@ -9,7 +9,11 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#ifndef _WIN32
 #include <unistd.h>
+#else
+#include <io.h>
+#endif
 #include <vector>
 
 static std::string create_tensor_type_fixture(void) {
