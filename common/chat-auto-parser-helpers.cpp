@@ -208,7 +208,6 @@ diff_split calculate_diff_split(const std::string & left, const std::string & ri
         result.suffix = "";
         result.left   = left.substr(right.size());
     }
-    }
 
     return result;
 }
