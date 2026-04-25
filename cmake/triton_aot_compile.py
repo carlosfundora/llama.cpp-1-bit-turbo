@@ -1,25 +1,51 @@
-#!/usr/bin/env python3
+from __future__ import annotations
+import logging
+from triton.compiler.compiler import compile as tc_compile, ASTSource
+import triton.language as tl
+import triton
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+import sys
+import os
+import argparse
+import logging
+import logging
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+#!/usr / bin / env python3
 """AOT compilation of fused RotorQuant Triton kernels to .hsaco (HIP) or .cubin (CUDA).
 
-Source kernels extracted from carlosfundora/sglang-1-bit-turbo @ 4786c5de
+Source kernels extracted from carlosfundora / sglang-1-bit-turbo @ 4786c5de
 These are standalone versions of the kernels originally defined inside a Python
-class/function scope (closure variables replaced with explicit parameters).
+class / function scope (closure variables replaced with explicit parameters).
 
 Usage:
-    python3 cmake/triton_aot_compile.py --output-dir build/triton-kernels --target hip
-    python3 cmake/triton_aot_compile.py --output-dir build/triton-kernels --target cuda
-    python3 cmake/triton_aot_compile.py --output-dir build/triton-kernels --target hip --arch gfx1031
+    python3 cmake / triton_aot_compile.py --output-dir build / triton-kernels --target hip
+    python3 cmake / triton_aot_compile.py --output-dir build / triton-kernels --target cuda
+    python3 cmake / triton_aot_compile.py --output-dir build / triton-kernels --target hip --arch gfx1031
 """
 
-from __future__ import annotations
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-import argparse
-import os
-import sys
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-import triton
-import triton.language as tl
-from triton.compiler.compiler import compile as tc_compile, ASTSource
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+
 
 # ---------------------------------------------------------------------------
 # Standalone Triton kernel definitions (extracted from sglang RotorQuant engine)
@@ -226,7 +252,7 @@ def _fused_iso4_quant_pack_kernel(
     stride_pack_b, stride_pack_e,
     BLOCK_G: tl.constexpr,
 ):
-    """Fused: quaternion sandwich → nearest centroid → 4-bit pack (2 bytes/group)."""
+    """Fused: quaternion sandwich → nearest centroid → 4-bit pack (2 bytes / group)."""
     pid_b = tl.program_id(0)
     pid_g = tl.program_id(1)
 
@@ -519,7 +545,7 @@ def compile_all(output_dir: str, target_name: str, arch: str) -> None:
     asm_key = "hsaco" if target_name == "hip" else "cubin"
 
     target = get_target(target_name, arch)
-    print(f"Target: {target}")
+    logging.info(f"Target: {target}")
 
     errors = []
     for fn, sig, consts, suffix in KERNELS:
@@ -527,7 +553,7 @@ def compile_all(output_dir: str, target_name: str, arch: str) -> None:
         out_name = f"{name}_{suffix}.{ext}"
         out_path = os.path.join(output_dir, out_name)
 
-        print(f"  Compiling {name} ({suffix}) ...", end=" ", flush=True)
+        logging.info(f"  Compiling {name} ({suffix}) ...")
         try:
             src = ASTSource(fn, signature=sig, constexprs=consts)
             compiled = tc_compile(src, target=target)
@@ -537,18 +563,18 @@ def compile_all(output_dir: str, target_name: str, arch: str) -> None:
                 binary = binary.encode()
             with open(out_path, "wb") as f:
                 f.write(binary)
-            print(f"ok → {out_name} ({len(binary)} bytes)")
+            logging.info(f"ok → {out_name} ({len(binary)} bytes)")
         except Exception as exc:
-            print(f"FAILED: {exc}")
+            logging.info(f"FAILED: {exc}")
             errors.append((name, exc))
 
     if errors:
-        print(f"\n{len(errors)} kernel(s) failed to compile:", file=sys.stderr)
+        logging.info(f"\n{len(errors)} kernel(s) failed to compile:")
         for name, exc in errors:
-            print(f"  {name}: {exc}", file=sys.stderr)
+            logging.info(f"  {name}: {exc}")
         sys.exit(1)
     else:
-        print(f"\nAll kernels compiled to {output_dir}/")
+        logging.info(f"\nAll kernels compiled to {output_dir}/")
 
 
 def main():
@@ -556,8 +582,8 @@ def main():
         description="AOT-compile fused RotorQuant Triton kernels"
     )
     parser.add_argument(
-        "--output-dir", default="build/triton-kernels",
-        help="Directory to write .hsaco/.cubin files (default: build/triton-kernels)",
+        "--output-dir", default="build / triton-kernels",
+        help="Directory to write .hsaco/.cubin files (default: build / triton-kernels)",
     )
     parser.add_argument(
         "--target", default="hip", choices=["hip", "cuda"],
@@ -575,11 +601,11 @@ def main():
     if args.arch is None:
         args.arch = "gfx1031" if args.target == "hip" else "sm_80"
 
-    print(f"RotorQuant Triton AOT compiler")
-    print(f"  target : {args.target}")
-    print(f"  arch   : {args.arch}")
-    print(f"  output : {args.output_dir}")
-    print()
+    logging.info("RotorQuant Triton AOT compiler")
+    logging.info(f"  target : {args.target}")
+    logging.info(f"  arch   : {args.arch}")
+    logging.info(f"  output : {args.output_dir}")
+    logging.info("")
 
     compile_all(args.output_dir, args.target, args.arch)
 

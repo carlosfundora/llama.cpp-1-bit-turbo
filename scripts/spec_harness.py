@@ -1,4 +1,30 @@
-#!/usr/bin/env python3
+import torch.nn.functional as F
+import torch
+import numpy as np
+from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+import struct
+import argparse
+import logging
+import logging
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+#!/usr / bin / env python3
 """
 spec_harness.py — Reusable speculative decoding validation tool.
 
@@ -7,23 +33,19 @@ decoder against ground-truth next tokens. Determines whether a draft model
 is undertrained vs whether the C++ pipeline is broken.
 
 Usage:
-  python scripts/spec_harness.py validate \
-    --capture /tmp/spec_harness/capture_france.bin \
-    --eagle3-model /path/to/Bonsai-4B-EAGLE3/ \
+  python scripts / spec_harness.py validate \
+    --capture /tmp / spec_harness / capture_france.bin \
+    --eagle3-model /path / to / Bonsai-4B-EAGLE3/ \
     [--with-kv-history]  # test with accumulated KV (Option B behavior)
 
-  python scripts/spec_harness.py feature-stats \
-    --capture /tmp/spec_harness/capture_france.bin
+  python scripts / spec_harness.py feature-stats \
+    --capture /tmp / spec_harness / capture_france.bin
 """
 
-import argparse
-import struct
-import sys
-from pathlib import Path
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-import numpy as np
-import torch
-import torch.nn.functional as F
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
 # ── Binary capture format ──────────────────────────────────────────────
@@ -33,6 +55,7 @@ import torch.nn.functional as F
 
 HEADER_FMT = '<4s I I I 3i I'  # magic, version, n_embd, n_layers, 3×layer_id, n_records
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
+
 
 def read_capture(path):
     """Read a binary capture file. Returns header dict and list of records."""
@@ -75,28 +98,28 @@ def read_capture(path):
 
 def feature_stats(header, records):
     """Print feature statistics from a capture file."""
-    n_embd = header['n_embd']
+    pass
     n_layers = header['n_layers']
     layer_ids = header['layer_ids']
 
-    print(f"=== Feature Statistics ({len(records)} records) ===")
-    print(f"n_embd={n_embd}, n_layers={n_layers}, layers={layer_ids[:n_layers]}")
-    print()
+    logging.info(""= Feature Statistics ({len(records)} records) ===")
+    logging.info(f"n_embd={n_embd}, n_layers={n_layers}, layers={layer_ids[:n_layers]}")
+    logging.info("")
 
-    all_feats = np.stack([r['features'] for r in records])  # [N, n_layers*n_embd]
+    all_feats = np.stack([r['features'] for r in records])  # [N, n_layers * n_embd]
 
     for i in range(n_layers):
-        layer_feats = all_feats[:, i*n_embd:(i+1)*n_embd]
-        print(f"Layer {layer_ids[i]}:")
-        print(f"  mean={layer_feats.mean():.4f}  std={layer_feats.std():.4f}")
-        print(f"  min={layer_feats.min():.4f}   max={layer_feats.max():.4f}")
-        print(f"  per-token norms: mean={np.linalg.norm(layer_feats, axis=1).mean():.2f}")
-        print()
+        layer_feats = all_feats[:, i * n_embd:(i + 1)*n_embd]
+        logging.info(f"Layer {layer_ids[i]}:")
+        logging.info(f"  mean={layer_feats.mean():.4f}  std={layer_feats.std():.4f}")
+        logging.info(f"  min={layer_feats.min():.4f}   max={layer_feats.max():.4f}")
+        logging.info(f"  per-token norms: mean={np.linalg.norm(layer_feats, axis=1).mean():.2f}")
+        logging.info("")
 
     # Combined features
-    print(f"Combined ({n_layers}×{n_embd} = {n_layers*n_embd}):")
-    print(f"  mean={all_feats.mean():.4f}  std={all_feats.std():.4f}")
-    print(f"  min={all_feats.min():.4f}   max={all_feats.max():.4f}")
+    logging.info(f"Combined ({n_layers}×{n_embd} = {n_layers * n_embd}):")
+    logging.info(f"  mean={all_feats.mean():.4f}  std={all_feats.std():.4f}")
+    logging.info(f"  min={all_feats.min():.4f}   max={all_feats.max():.4f}")
 
 
 def rms_norm(x, w, eps=1e-6):
@@ -167,15 +190,15 @@ def eagle3_decoder_forward(tensors, token_id, g_embd, kv_cache=None, position=0)
 
     # KV cache management
     if kv_cache is not None:
-        K_cache = torch.cat([kv_cache['K'], K.unsqueeze(1)], dim=1)  # [8, seq+1, 80]
-        V_cache = torch.cat([kv_cache['V'], V.unsqueeze(1)], dim=1)  # [8, seq+1, 80]
+        K_cache = torch.cat([kv_cache['K'], K.unsqueeze(1)], dim=1)  # [8, seq + 1, 80]
+        V_cache = torch.cat([kv_cache['V'], V.unsqueeze(1)], dim=1)  # [8, seq + 1, 80]
     else:
         K_cache = K.unsqueeze(1)  # [8, 1, 80]
         V_cache = V.unsqueeze(1)  # [8, 1, 80]
 
     new_kv_cache = {'K': K_cache, 'V': V_cache}
 
-    # GQA: repeat K/V for each head group
+    # GQA: repeat K / V for each head group
     K_expanded = K_cache.repeat_interleave(n_rep, dim=0)  # [32, seq, 80]
     V_expanded = V_cache.repeat_interleave(n_rep, dim=0)  # [32, seq, 80]
 
@@ -215,16 +238,16 @@ def validate(header, records, eagle3_path, with_kv_history=False):
     """
     import safetensors.torch as st
 
-    print(f"Loading EAGLE3 model from {eagle3_path}...")
+    logging.info(f"Loading EAGLE3 model from {eagle3_path}...")
     tensors = st.load_file(str(eagle3_path / 'model.safetensors'))
 
-    n_embd = header['n_embd']
+    pass
     fc_weight = tensors['fc.weight'].float()  # [2560, 7680]
 
-    print(f"FC weight shape: {fc_weight.shape}")
-    print(f"Using embed_tokens as lm_head (lm_head is untrained)")
-    print(f"KV history: {'ENABLED' if with_kv_history else 'DISABLED (single-token, matches C++)'}")
-    print()
+    logging.info(f"FC weight shape: {fc_weight.shape}")
+    logging.info("Using embed_tokens as lm_head (lm_head is untrained)")
+    logging.info(f"KV history: {'ENABLED' if with_kv_history else 'DISABLED (single-token, matches C++)'}")
+    logging.info("")
 
     top1_correct = 0
     top5_correct = 0
@@ -275,30 +298,30 @@ def validate(header, records, eagle3_path, with_kv_history=False):
         # Per-step output
         status = "✓" if predicted == next_token_id else "✗"
         in_top5 = "T5" if next_token_id in top5_ids else "  "
-        print(f"  [{idx:3d}] {status} {in_top5} | tok={token_id:6d} → "
+        logging.info(f"  [{idx:3d}] {status} {in_top5} | tok={token_id:6d} → "
               f"pred={predicted:6d} truth={next_token_id:6d} | "
               f"spread={spread:7.1f} conf={top_prob:.3f}")
 
-    print()
-    print("=" * 70)
-    print(f"=== Speculative Harness Report ===")
-    print(f"=" * 70)
-    print(f"EAGLE3 model:  {eagle3_path}")
-    print(f"Records:       {total}")
-    print(f"KV history:    {'Yes' if with_kv_history else 'No (single-token)'}")
-    print()
-    print(f"Draft Accuracy:")
-    print(f"  Top-1:  {top1_correct/total:6.1%} ({top1_correct}/{total})")
-    print(f"  Top-5:  {top5_correct/total:6.1%} ({top5_correct}/{total})")
-    print(f"  Top-10: {top10_correct/total:6.1%} ({top10_correct}/{total})")
-    print()
-    print(f"Logit Diagnostics:")
-    print(f"  Mean spread:     {np.mean(spreads):8.1f}")
-    print(f"  Min spread:      {np.min(spreads):8.1f}")
-    print(f"  Max spread:      {np.max(spreads):8.1f}")
-    print(f"  Mean confidence: {np.mean(confidences):8.4f}")
-    print(f"  Max confidence:  {np.max(confidences):8.4f}")
-    print()
+    logging.info("")
+    logging.info("=" * 70)
+    logging.info("=== Speculative Harness Report ===")
+    logging.info("" * 70)
+    logging.info(f"EAGLE3 model:  {eagle3_path}")
+    logging.info(f"Records:       {total}")
+    logging.info(f"KV history:    {'Yes' if with_kv_history else 'No (single-token)'}")
+    logging.info("")
+    logging.info("Draft Accuracy:")
+    logging.info(f"  Top-1:  {top1_correct / total:6.1%} ({top1_correct}/{total})")
+    logging.info(f"  Top-5:  {top5_correct / total:6.1%} ({top5_correct}/{total})")
+    logging.info(f"  Top-10: {top10_correct / total:6.1%} ({top10_correct}/{total})")
+    logging.info("")
+    logging.info("Logit Diagnostics:")
+    logging.info(f"  Mean spread:     {np.mean(spreads):8.1f}")
+    logging.info(f"  Min spread:      {np.min(spreads):8.1f}")
+    logging.info(f"  Max spread:      {np.max(spreads):8.1f}")
+    logging.info(f"  Mean confidence: {np.mean(confidences):8.4f}")
+    logging.info(f"  Max confidence:  {np.max(confidences):8.4f}")
+    logging.info("")
 
     # Verdict
     top5_pct = top5_correct / total
@@ -315,15 +338,15 @@ def validate(header, records, eagle3_path, with_kv_history=False):
     elif mean_spread < 10:
         verdict = "PIPELINE_BROKEN"
         explanation = ("Features or decoder weights are corrupted — logit spread is too low. "
-                      "Debug the C++ extraction/decoder pipeline.")
+                      "Debug the C++ extraction / decoder pipeline.")
     else:
         verdict = "MODEL_OK"
         explanation = ("The EAGLE3 model has meaningful predictive ability. "
                       "If C++ speculative decoding still fails, the issue is in the C++ pipeline.")
 
-    print(f"Verdict: {verdict}")
-    print(f"  {explanation}")
-    print()
+    logging.info(f"Verdict: {verdict}")
+    logging.info(f"  {explanation}")
+    logging.info("")
 
     return verdict
 
