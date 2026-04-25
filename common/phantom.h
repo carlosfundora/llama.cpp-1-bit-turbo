@@ -1,3 +1,13 @@
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <intrin.h>
+#define __builtin_popcountll __popcnt64
+#endif
+
+
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <intrin.h>
+#define __builtin_popcountll __popcnt64
+#endif
 // PHANTOM-X speculative decoding for llama.cpp
 //
 // Single-file implementation of PHANTOM-X hybrid speculative decoding:

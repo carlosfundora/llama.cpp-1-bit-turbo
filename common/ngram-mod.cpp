@@ -1,3 +1,13 @@
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <intrin.h>
+#define __builtin_prefetch(ptr, rw, loc) _mm_prefetch((const char*)(ptr), _MM_HINT_T0)
+#endif
+
+
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <intrin.h>
+#define __builtin_prefetch(ptr, rw, loc) _mm_prefetch((const char*)(ptr), _MM_HINT_T0)
+#endif
 #include "ngram-mod.h"
 
 //
