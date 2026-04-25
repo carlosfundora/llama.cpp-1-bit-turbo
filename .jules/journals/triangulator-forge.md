@@ -1,0 +1,3 @@
+ 2026-04-25 - Architectural Pattern Identification: The Orchestrator vs The Engine
+Learning: There is a recurring pattern in LLM serving where highly popular repositories (like Ollama) are essentially orchestration shells around native execution engines (like llama.cpp). These shells provide superior DX but limited novel execution architecture, while "Engine" repositories (vLLM, TGI) entangle execution with heavy ML frameworks (PyTorch, Ray).
+Action: Focus future audits on identifying the precise boundary between the "Orchestrator" and the "Engine" to avoid importing framework entanglement when only API ergonomics are desired.
