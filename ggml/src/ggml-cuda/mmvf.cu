@@ -79,7 +79,7 @@ static __global__ void mul_mat_vec_f(
         gate_x += int64_t(sample_x)  *stride_sample_x   + channel_x  *stride_channel_x   + row*stride_row;
     }
 
-    // const int channel_bias = ids ? channel_x : channel_dst;
+    const int channel_bias = ids ? channel_x : channel_dst; (void)channel_bias;
 
     if constexpr (has_fusion) {
         if (use_bias) {
@@ -94,7 +94,7 @@ static __global__ void mul_mat_vec_f(
 
     extern __shared__ char data_mmv[];
     float * buf_iw = (float *) data_mmv;
-    // float * buf_iw_gate = nullptr;
+    float * buf_iw_gate = nullptr; (void)buf_iw_gate;
     if constexpr (has_fusion) {
         buf_iw_gate = (float *) (data_mmv + warp_size*sizeof(float));
     }
@@ -122,10 +122,10 @@ static __global__ void mul_mat_vec_f(
 
     if constexpr (std::is_same_v<T, float>) {
         const float2 * x2 = (const float2 *) x;
-        // const float2 * gate_x2 = nullptr;
+        const float2 * gate_x_vec = nullptr; (void)gate_x_vec;
         if constexpr (has_fusion) {
             if (use_gate) {
-                gate_x2 = (const float2 *) gate_x;
+                gate_x_vec = (const float2 *) gate_x;
             }
         }
 
@@ -134,7 +134,7 @@ static __global__ void mul_mat_vec_f(
             float2 tmpx_gate = make_float2(0.0f, 0.0f);
             if constexpr (has_fusion) {
                 if (use_gate) {
-                    tmpx_gate = gate_x2[col2];
+                    tmpx_gate = gate_x_vec[col2];
                 }
             }
 
@@ -154,10 +154,10 @@ static __global__ void mul_mat_vec_f(
         }
     } else if constexpr (std::is_same_v<T, half>) {
         const half2 * x2 = (const half2 *) x;
-        const half2 * gate_x2 = nullptr;
+        const half2 * gate_x_vec = nullptr; (void)gate_x_vec;
         if constexpr (has_fusion) {
             if (use_gate) {
-                gate_x2 = (const half2 *) gate_x;
+                gate_x_vec = (const half2 *) gate_x;
             }
         }
 
@@ -167,7 +167,7 @@ static __global__ void mul_mat_vec_f(
                 float2 tmpx_gate = make_float2(0.0f, 0.0f);
                 if constexpr (has_fusion) {
                     if (use_gate) {
-                        tmpx_gate = __half22float2(gate_x2[col2]);
+                        tmpx_gate = __half22float2(gate_x_vec[col2]);
                     }
                 }
 #pragma unroll
@@ -194,7 +194,7 @@ static __global__ void mul_mat_vec_f(
                 half2 tmpx_gate = make_half2(0.0f, 0.0f);
                 if constexpr (has_fusion) {
                     if (use_gate) {
-                        tmpx_gate = gate_x2[col2];
+                        tmpx_gate = gate_x_vec[col2];
                     }
                 }
 #pragma unroll
@@ -231,10 +231,10 @@ static __global__ void mul_mat_vec_f(
 //TODO: add support for ggml_cuda_mad for hip_bfloat162
 #if defined(GGML_USE_HIP)
         const int * x2 = (const int *) x;
-        const int * gate_x2 = nullptr;
+        const int * gate_x_vec = nullptr; (void)gate_x_vec;
         if constexpr (has_fusion) {
             if (use_gate) {
-                gate_x2 = (const int *) gate_x;
+                gate_x_vec = (const int *) gate_x;
             }
         }
         for (int col2 = tid; col2 < ncols2; col2 += block_size) {
@@ -242,7 +242,7 @@ static __global__ void mul_mat_vec_f(
             int tmpx_gate = 0;
             if constexpr (has_fusion) {
                 if (use_gate) {
-                    tmpx_gate = gate_x2[col2];
+                    tmpx_gate = gate_x_vec[col2];
                 }
             }
 #pragma unroll
@@ -265,10 +265,10 @@ static __global__ void mul_mat_vec_f(
         }
 #else
         const nv_bfloat162 * x2 = (const nv_bfloat162 *) x;
-        const nv_bfloat162 * gate_x2 = nullptr;
+        const nv_bfloat162 * gate_x_vec = nullptr; (void)gate_x_vec;
         if constexpr (has_fusion) {
             if (use_gate) {
-                gate_x2 = (const nv_bfloat162 *) gate_x;
+                gate_x_vec = (const nv_bfloat162 *) gate_x;
             }
         }
         for (int col2 = tid; col2 < ncols2; col2 += block_size) {
@@ -276,7 +276,7 @@ static __global__ void mul_mat_vec_f(
             nv_bfloat162 tmpx_gate;
             if constexpr (has_fusion) {
                 if (use_gate) {
-                    tmpx_gate = gate_x2[col2];
+                    tmpx_gate = gate_x_vec[col2];
                 }
             }
 #pragma unroll
