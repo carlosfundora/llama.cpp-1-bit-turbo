@@ -9,11 +9,15 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
-#if defined(_WIN32)
-#include <io.h>
+
+#ifdef _WIN32
+    #include <windows.h>
+    #include <io.h>
+    #define access _access
 #else
-#include <unistd.h>
+    #include <unistd.h>
 #endif
+
 #include <vector>
 
 static std::string create_tensor_type_fixture(void) {
