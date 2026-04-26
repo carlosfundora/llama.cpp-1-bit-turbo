@@ -170,7 +170,8 @@ int main(int argc, char ** argv) {
 
         // Generate tokens one at a time, capturing features at each step
         llama_token id_last = inp.back();
-        int n_past = inp.size() - 1;
+        (void)inp;
+        // int n_past = inp.size() - 1;
 
         for (int i = 0; i < params.n_predict; i++) {
             // Decode the current token
@@ -179,7 +180,7 @@ int main(int argc, char ** argv) {
                 LOG_ERR("  decode failed at step %d\n", i);
                 break;
             }
-            n_past++;
+            // n_past++;
 
             // Extract features for this token
             int32_t n_feat = 0;
@@ -224,7 +225,9 @@ int main(int argc, char ** argv) {
         std::string dir = output_path.substr(0, output_path.find_last_of('/'));
         if (!dir.empty()) {
             std::string cmd = "mkdir -p '" + dir + "'";
-            (void)system(cmd.c_str());
+            if (system(cmd.c_str()) != 0) {
+                LOG_WRN("Warning: Command failed: %s\n", cmd.c_str());
+            }
         }
 
         std::ofstream out(output_path, std::ios::binary);
