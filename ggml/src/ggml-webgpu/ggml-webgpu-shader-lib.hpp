@@ -1,3 +1,8 @@
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wc++20-designator"
+#endif
+
 #ifndef GGML_WEBGPU_SHADER_LIB_HPP
 #define GGML_WEBGPU_SHADER_LIB_HPP
 
@@ -2195,3 +2200,8 @@ class ggml_webgpu_shader_lib {
 };
 
 #endif  // GGML_WEBGPU_SHADER_LIB_HPP
+
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif

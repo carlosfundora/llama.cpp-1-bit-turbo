@@ -17,9 +17,9 @@ import argparse
 import os
 import sys
 
-import triton  # type: ignore
-import triton.language as tl  # type: ignore
-from triton.compiler.compiler import compile as tc_compile, ASTSource  # type: ignore
+import triton
+import triton.language as tl
+from triton.compiler.compiler import compile as tc_compile, ASTSource
 
 # ---------------------------------------------------------------------------
 # Standalone Triton kernel definitions (extracted from sglang RotorQuant engine)
@@ -501,11 +501,11 @@ KERNELS = [
 def get_target(target_name: str, arch: str):
     """Build a Triton backend target object."""
     if target_name == "hip":
-        from triton.backends.amd.compiler import GPUTarget  # type: ignore
+        from triton.backends.amd.compiler import GPUTarget
         warp_size = 64
         return GPUTarget("hip", arch, warp_size)
     elif target_name == "cuda":
-        from triton.backends.nvidia.compiler import GPUTarget  # type: ignore
+        from triton.backends.nvidia.compiler import GPUTarget
         warp_size = 32
         return GPUTarget("cuda", arch, warp_size)
     else:

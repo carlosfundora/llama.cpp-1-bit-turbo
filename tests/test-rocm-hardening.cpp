@@ -10,7 +10,7 @@
 #include <cstring>
 #include <string>
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
 #include <io.h>
 #include <windows.h>
 #else
@@ -47,7 +47,7 @@ static std::string create_tensor_type_fixture(void) {
     add_tensor("blk.0.ffn_norm.weight", GGML_TYPE_F16);
     add_tensor("output_norm.weight", GGML_TYPE_BF16);
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
     char fixture_path[MAX_PATH];
     tmpnam_s(fixture_path, MAX_PATH);
 #else

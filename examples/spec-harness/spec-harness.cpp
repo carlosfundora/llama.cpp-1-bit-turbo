@@ -170,7 +170,7 @@ int main(int argc, char ** argv) {
 
         // Generate tokens one at a time, capturing features at each step
         llama_token id_last = inp.back();
-        // int n_past = inp.size() - 1; // unused variable
+        int n_past = inp.size() - 1;
 
         for (int i = 0; i < params.n_predict; i++) {
             // Decode the current token
@@ -180,6 +180,7 @@ int main(int argc, char ** argv) {
                 break;
             }
             n_past++;
+            (void)n_past; // unused, but we need it to increment
 
             // Extract features for this token
             int32_t n_feat = 0;
