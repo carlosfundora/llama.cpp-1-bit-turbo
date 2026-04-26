@@ -17,9 +17,12 @@ import argparse
 import os
 import sys
 
-import triton
-import triton.language as tl
-from triton.compiler.compiler import compile as tc_compile, ASTSource
+try:
+    import triton
+    import triton.language as tl
+    from triton.compiler.compiler import compile as tc_compile, ASTSource
+except ImportError:
+    pass
 
 # ---------------------------------------------------------------------------
 # Standalone Triton kernel definitions (extracted from sglang RotorQuant engine)
