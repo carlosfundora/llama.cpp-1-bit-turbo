@@ -170,7 +170,7 @@ int main(int argc, char ** argv) {
 
         // Generate tokens one at a time, capturing features at each step
         llama_token id_last = inp.back();
-        int n_past = inp.size() - 1;
+        // int n_past = inp.size() - 1; // unused variable
 
         for (int i = 0; i < params.n_predict; i++) {
             // Decode the current token
@@ -224,7 +224,8 @@ int main(int argc, char ** argv) {
         std::string dir = output_path.substr(0, output_path.find_last_of('/'));
         if (!dir.empty()) {
             std::string cmd = "mkdir -p '" + dir + "'";
-            (void)system(cmd.c_str());
+            int ret = system(cmd.c_str());
+            (void)ret; // Fix unused result warning
         }
 
         std::ofstream out(output_path, std::ios::binary);

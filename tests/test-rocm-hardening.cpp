@@ -12,6 +12,7 @@
 
 #ifdef _WIN32
 #include <io.h>
+#include <windows.h>
 #else
 #include <unistd.h>
 #endif
@@ -46,10 +47,15 @@ static std::string create_tensor_type_fixture(void) {
     add_tensor("blk.0.ffn_norm.weight", GGML_TYPE_F16);
     add_tensor("output_norm.weight", GGML_TYPE_BF16);
 
+#ifdef _WIN32
+    char fixture_path[MAX_PATH];
+    tmpnam_s(fixture_path, MAX_PATH);
+#else
     char fixture_path[] = "/tmp/llama-rocm-hardening-XXXXXX";
     const int fd = mkstemp(fixture_path);
     assert(fd >= 0);
     close(fd);
+#endif
 
     model_saver.save(fixture_path);
 
