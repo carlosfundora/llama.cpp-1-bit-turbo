@@ -1,3 +1,6 @@
  2026-04-25 - Architectural Pattern Identification: The Orchestrator vs The Engine
 Learning: There is a recurring pattern in LLM serving where highly popular repositories (like Ollama) are essentially orchestration shells around native execution engines (like llama.cpp). These shells provide superior DX but limited novel execution architecture, while "Engine" repositories (vLLM, TGI) entangle execution with heavy ML frameworks (PyTorch, Ray).
 Action: Focus future audits on identifying the precise boundary between the "Orchestrator" and the "Engine" to avoid importing framework entanglement when only API ergonomics are desired.
+ 2026-04-26 - SGLang RadixAttention Extraction Feasibility
+Learning: SGLang achieves its speed largely through Python-bound orchestration of custom kernels (`sglang/srt/managers`), heavily entangling its advanced RadixAttention caching mechanism with PyTorch. Triton Server similarly buries its core batching logic under layers of gRPC and enterprise C++ abstraction.
+Action: For high-performance C++ inference engines like llama.cpp, avoid importing complex orchestration logic or framework bindings. Instead, extract pure conceptual algorithms (e.g., Radix Tree KV slot mapping) and implement them natively in C/C++ without pulling in external ecosystem baggage.
