@@ -20,10 +20,8 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+
 #!/usr / bin / env python3
 """
 spec_harness.py — Reusable speculative decoding validation tool.
@@ -42,8 +40,7 @@ Usage:
     --capture /tmp / spec_harness / capture_france.bin
 """
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -98,11 +95,11 @@ def read_capture(path):
 
 def feature_stats(header, records):
     """Print feature statistics from a capture file."""
-    pass
+    n_embd = header['n_embd']
     n_layers = header['n_layers']
     layer_ids = header['layer_ids']
 
-    logging.info(""= Feature Statistics ({len(records)} records) ===")
+    logging.info(f"=== Feature Statistics ({len(records)} records) ===")
     logging.info(f"n_embd={n_embd}, n_layers={n_layers}, layers={layer_ids[:n_layers]}")
     logging.info("")
 
@@ -241,7 +238,7 @@ def validate(header, records, eagle3_path, with_kv_history=False):
     logging.info(f"Loading EAGLE3 model from {eagle3_path}...")
     tensors = st.load_file(str(eagle3_path / 'model.safetensors'))
 
-    pass
+    n_embd = header['n_embd']
     fc_weight = tensors['fc.weight'].float()  # [2560, 7680]
 
     logging.info(f"FC weight shape: {fc_weight.shape}")
@@ -305,7 +302,7 @@ def validate(header, records, eagle3_path, with_kv_history=False):
     logging.info("")
     logging.info("=" * 70)
     logging.info("=== Speculative Harness Report ===")
-    logging.info("" * 70)
+    logging.info("=" * 70)
     logging.info(f"EAGLE3 model:  {eagle3_path}")
     logging.info(f"Records:       {total}")
     logging.info(f"KV history:    {'Yes' if with_kv_history else 'No (single-token)'}")
