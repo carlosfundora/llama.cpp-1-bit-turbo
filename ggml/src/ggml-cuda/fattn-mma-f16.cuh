@@ -504,7 +504,7 @@ static __device__ __forceinline__ void flash_attn_ext_f16_iter(
     constexpr bool Q_in_reg        = ggml_cuda_fattn_mma_get_Q_in_reg (DKQ, DV, ncols);
     constexpr int  nstages         = ggml_cuda_fattn_mma_get_nstages  (DKQ, DV, ncols1, ncols2);
 
-    // constexpr int stride_tile_Q = DKQ/2     + 4;
+    constexpr int stride_tile_Q = DKQ/2     + 4;
     constexpr int stride_tile_K = nbatch_K2 + 4;
 
     constexpr int stride_tile_V = V_is_K_view ? stride_tile_K : nbatch_V2 + 4;
@@ -540,7 +540,7 @@ static __device__ __forceinline__ void flash_attn_ext_f16_iter(
 #pragma unroll
     for (int k0_start = (DKQ/2-1) - (DKQ/2-1) % nbatch_K2; k0_start >= 0; k0_start -= nbatch_K2) {
         const int k0_stop = k0_start + nbatch_K2 < DKQ/2 ? k0_start + nbatch_K2 : DKQ/2;
-        // const int k0_diff = k0_stop - k0_start;
+        const int k0_diff = k0_stop - k0_start;
 
         if constexpr (nstages <= 1) {
             constexpr bool use_cp_async = nstages == 1;
@@ -872,7 +872,7 @@ static __device__ __forceinline__ void flash_attn_ext_f16_iter(
     for (int i0_start = 0; i0_start < DV; i0_start += 2*nbatch_V2) {
         static_assert(DV % (2*nbatch_V2) == 0, "bad loop size");
         const int i0_stop = i0_start + 2*nbatch_V2;
-        // const int i0_diff = i0_stop - i0_start;
+        const int i0_diff = i0_stop - i0_start;
 
         if constexpr (nstages <= 1) {
             if (!V_is_K_view || i0_stop > 2*nbatch_K2) {
@@ -1056,7 +1056,7 @@ static __device__ __forceinline__ void flash_attn_ext_f16_process_tile(
 
     static_assert(nwarps * (cols_per_warp/ncols2) % ncols1 == 0, "bad nwarps");
 
-    // constexpr int stride_tile_Q = DKQ/2     + 4;
+    constexpr int stride_tile_Q = DKQ/2     + 4;
     constexpr int stride_tile_K = nbatch_K2 + 4;
 
     constexpr int stride_tile_V = V_is_K_view ? stride_tile_K : nbatch_V2 + 4;
