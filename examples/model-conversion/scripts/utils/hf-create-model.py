@@ -74,5 +74,3 @@ if not args.no_card:
 
 if not args.dry_run and repo_url:
     print(f"Repository created: {repo_url}")
-
-

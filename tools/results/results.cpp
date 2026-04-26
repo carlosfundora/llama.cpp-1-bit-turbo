@@ -180,4 +180,3 @@ int main(int argc, char ** argv) {
     gguf_write_to_file(gguf_ctx.get(), params.out_file.c_str(), /*only_meta =*/ false);
     return 0;
 }
-

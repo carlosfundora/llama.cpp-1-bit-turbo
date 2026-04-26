@@ -108,7 +108,7 @@ ${'```'}
 
 **Headers:**
 - X-RateLimit-Limit
-- X-RateLimit-Remaining  
+- X-RateLimit-Remaining
 - X-RateLimit-Reset
 
 ### Webhooks

@@ -22,4 +22,3 @@ uint fastdiv(uint n, uint mp, uint L) {
     umulExtended(n, mp, msbs, lsbs);
     return (msbs + n) >> L;
 }
-

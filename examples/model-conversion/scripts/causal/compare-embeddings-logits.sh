@@ -43,4 +43,3 @@ python scripts/utils/semantic_check.py --model-path $MODEL_PATH \
     --cpp-embeddings $CPP_EMBEDDINGS \
     --prompt "Hello world today" \
     --causal
-

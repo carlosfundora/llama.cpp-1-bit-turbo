@@ -78,4 +78,3 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     dst[params.offset_dst + dst_idx] = DST_TYPE((src[params.offset_src + src_idx]));
 }
-

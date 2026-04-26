@@ -119,6 +119,3 @@ std::string common_unicode_cpt_to_utf8(uint32_t cpt) {
 
     throw std::invalid_argument("invalid codepoint");
 }
-
-
-

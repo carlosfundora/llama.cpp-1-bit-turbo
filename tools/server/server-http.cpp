@@ -448,4 +448,3 @@ void server_http_context::post(const std::string & path, const server_http_conte
         process_handler_response(std::move(request), response, res);
     });
 }
-

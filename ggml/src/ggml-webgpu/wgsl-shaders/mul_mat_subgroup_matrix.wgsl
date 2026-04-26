@@ -193,4 +193,3 @@ fn main(@builtin(workgroup_id) wg_id: vec3<u32>,
         }
     }
 }
-

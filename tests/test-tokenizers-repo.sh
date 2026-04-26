@@ -40,4 +40,3 @@ for gguf in $folder/**/*.gguf; do
         printf "Found \"$gguf\" without matching inp/out files, ignoring...\n"
     fi
 done
-

@@ -63,4 +63,3 @@ void main() {
         data_d[dst_idx + col] = v + sum;
     }
 }
-
