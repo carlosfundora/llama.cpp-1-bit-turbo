@@ -9,7 +9,17 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
-#include <unistd.h>
+
+#ifdef _WIN32
+    #include <windows.h>
+    #include <io.h>
+    #include <fcntl.h>
+    #include <sys/stat.h>
+    #define access _access
+#else
+    #include <unistd.h>
+#endif
+
 #include <vector>
 
 static std::string create_tensor_type_fixture(void) {
@@ -40,17 +50,31 @@ static std::string create_tensor_type_fixture(void) {
     add_tensor("blk.0.ffn_norm.weight", GGML_TYPE_F16);
     add_tensor("output_norm.weight", GGML_TYPE_BF16);
 
+#ifdef _WIN32
+    char fixture_path[MAX_PATH];
+    GetTempPathA(MAX_PATH, fixture_path);
+    char temp_file[MAX_PATH];
+    GetTempFileNameA(fixture_path, "llama", 0, temp_file);
+    const int fd = _open(temp_file, _O_CREAT | _O_SHORT_LIVED | _O_EXCL, _S_IREAD | _S_IWRITE);
+    std::string path_str = temp_file;
+#else
     char fixture_path[] = "/tmp/llama-rocm-hardening-XXXXXX";
     const int fd = mkstemp(fixture_path);
+    std::string path_str = fixture_path;
+#endif
     assert(fd >= 0);
+#ifdef _WIN32
+    _close(fd);
+#else
     close(fd);
+#endif
 
-    model_saver.save(fixture_path);
+    model_saver.save(path_str.c_str());
 
     gguf_free(gguf_ctx);
     ggml_free(tensor_ctx);
 
-    return fixture_path;
+    return path_str;
 }
 
 int main(void) {

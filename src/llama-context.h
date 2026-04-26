@@ -270,7 +270,7 @@ private:
 
     // EAGLE3 feature extraction from target model
     llama_eagle3 eagle3;
-    const llama_model * eagle3_target_model = nullptr; // set when this context is for an EAGLE3 draft model
+    // const llama_model * eagle3_target_model = nullptr; // set when this context is for an EAGLE3 draft model
 
     std::unique_ptr<llama_memory_i> memory;
 

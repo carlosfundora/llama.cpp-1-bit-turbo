@@ -1,0 +1,6 @@
+🧹 [Code Health] Implement case-insensitive sorting for Jinja sort and dictsort
+
+🎯 **What:** Implemented case-insensitive sorting behavior for Jinja's `sort` and `dictsort` filters when `case_sensitive=false` is provided.
+💡 **Why:** This resolves a FIXME and completes the implementation of Jinja's value sorting functionality, allowing sorting algorithms to function correctly without strict case sensitivity when explicitly requested by templates.
+✅ **Verification:** Verified by compiling the `test-jinja` executable and running the Jinja test suite (`ctest -R jinja -V`) which passed entirely.
+✨ **Result:** Improved correctness and template compatibility by enabling standard case-insensitive string evaluation during sorts without modifying the input array structure in place.

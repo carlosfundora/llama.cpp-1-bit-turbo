@@ -1053,8 +1053,13 @@ bool tty_can_use_colors() {
 
     // Check if stdout and stderr are connected to a terminal
     // We check both because log messages can go to either
+#if defined(_WIN32)
+    bool stdout_is_tty = _isatty(_fileno(stdout));
+    bool stderr_is_tty = _isatty(_fileno(stderr));
+#else
     bool stdout_is_tty = isatty(fileno(stdout));
     bool stderr_is_tty = isatty(fileno(stderr));
+#endif
 
     return stdout_is_tty || stderr_is_tty;
 }
