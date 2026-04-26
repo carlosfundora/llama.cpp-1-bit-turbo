@@ -24,6 +24,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#ifdef _WIN32
+#include <intrin.h>
+#endif
 
 #if defined(__linux__)
 #include <sys/mman.h>
@@ -99,7 +102,11 @@ struct phantom_bloom {
     float occupancy() const {
         size_t set = 0;
         for (auto w : bits) {
+#ifdef _WIN32
+            set += __popcnt64(w);
+#else
             set += __builtin_popcountll(w);
+#endif
         }
         return (float)set / (float)n_bits;
     }

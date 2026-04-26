@@ -9,7 +9,14 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <share.h>
+#else
 #include <unistd.h>
+#endif
 #include <vector>
 
 static std::string create_tensor_type_fixture(void) {
@@ -41,9 +48,19 @@ static std::string create_tensor_type_fixture(void) {
     add_tensor("output_norm.weight", GGML_TYPE_BF16);
 
     char fixture_path[] = "/tmp/llama-rocm-hardening-XXXXXX";
+#ifdef _WIN32
+    int fd;
+    assert(_mktemp_s(fixture_path, sizeof(fixture_path)) == 0);
+    assert(_sopen_s(&fd, fixture_path, _O_CREAT | _O_TRUNC | _O_RDWR, _SH_DENYNO, _S_IREAD | _S_IWRITE) == 0);
+#else
     const int fd = mkstemp(fixture_path);
+#endif
     assert(fd >= 0);
+#ifdef _WIN32
+    _close(fd);
+#else
     close(fd);
+#endif
 
     model_saver.save(fixture_path);
 

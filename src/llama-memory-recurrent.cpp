@@ -426,27 +426,25 @@ llama_memory_context_ptr llama_memory_recurrent::init_update(llama_context * lct
 }
 
 bool llama_memory_recurrent::prepare(const std::vector<llama_ubatch> & ubatches) {
-    // simply remember the full state because it is very small for this type of cache
-    // TODO: optimize
-    auto org_cells = cells;
-    auto org_used = used;
-    auto org_head = head;
-
-    bool success = true;
-
     for (const auto & ubatch : ubatches) {
-        if (!find_slot(ubatch)) {
-            success = false;
-            break;
+        const uint32_t n_seq_tokens = ubatch.n_seq_tokens;
+        const uint32_t n_seqs       = ubatch.n_seqs;
+
+        for (uint32_t s = 0; s < n_seqs; ++s) {
+            const uint32_t i = s*n_seq_tokens;
+
+            for (uint32_t j = 0; j < (uint32_t) ubatch.n_seq_id[i]; ++j) {
+                const llama_seq_id seq_id = ubatch.seq_id[i][j];
+
+                if (seq_id < 0 || (uint32_t) seq_id >= size) {
+                    LLAMA_LOG_ERROR("%s: seq_id=%d >= n_seq_max=%u Try using a bigger --parallel value\n", __func__, seq_id, n_seq_max);
+                    return false;
+                }
+            }
         }
     }
 
-    // restore the original state
-    cells = std::move(org_cells);
-    used = org_used;
-    head = org_head;
-
-    return success;
+    return true;
 }
 
 bool llama_memory_recurrent::find_slot(const llama_ubatch & ubatch) {
