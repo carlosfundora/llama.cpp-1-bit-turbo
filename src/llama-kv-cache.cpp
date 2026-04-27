@@ -920,6 +920,29 @@ llama_kv_cache::slot_info llama_kv_cache::find_slot(const llama_ubatch & ubatch,
 
         uint32_t n_tested = 0;
 
+        // TurboMind style O(1) allocation path for non-contiguous fragmented caches without SWA.
+        // When SWA is disabled, we only need to look at truly empty cells.
+        // Using the free_blocks bitset prevents an O(N) linear scan over occupied cells.
+        if (!cont && n_swa == 0) {
+            while (res.idxs[s].size() < n_tokens && n_tested < cells.size()) {
+                if (head_cur >= cells.size()) head_cur = 0;
+
+                uint32_t next_free = cells.free_blocks.find_next(head_cur);
+                if (next_free == cells.size()) {
+                    next_free = cells.free_blocks.find_first(); // wrap around
+                }
+
+                if (next_free == cells.size()) {
+                    break; // No free blocks left
+                }
+
+                res.idxs[s].push_back(next_free);
+                head_cur = next_free + 1;
+                n_tested++; // n_tested is a bit loose here, but the while loop condition res.idxs[s].size() < n_tokens dominates
+            }
+            if (res.idxs[s].size() == n_tokens) continue; // move to next sequence
+        }
+
         // for continuous slots, we test that all tokens in the ubatch fit, starting from the current head
         // for non-continuous slots, we test the tokens one by one
         const uint32_t n_test = cont ? n_tokens : 1;

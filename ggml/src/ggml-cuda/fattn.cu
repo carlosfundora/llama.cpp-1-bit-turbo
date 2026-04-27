@@ -396,6 +396,11 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
         case GGML_TYPE_BF16:
             break;
         default:
+            // Allow rotorquant V types to bypass K type rejection if matched with supported K
+            if (V->type == GGML_TYPE_PLANAR3_0 || V->type == GGML_TYPE_PLANAR4_0 ||
+                V->type == GGML_TYPE_ISO3_0    || V->type == GGML_TYPE_ISO4_0) {
+                break;
+            }
             return BEST_FATTN_KERNEL_NONE;
     }
 
@@ -454,7 +459,7 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
         return BEST_FATTN_KERNEL_WMMA_F16;
     }
 
-    if (amd_wmma_available(cc) && GGML_CUDA_CC_IS_RDNA4(cc) && gqa_opt_applies && Q->ne[0] <= 128 && Q->ne[0] != 40 && Q->ne[0] != 72) {
+    if (amd_wmma_available(cc) && gqa_opt_applies && Q->ne[0] <= 128 && Q->ne[0] != 40 && Q->ne[0] != 72) {
         if (can_use_vector_kernel) {
             if (!ggml_is_quantized(K->type) && !ggml_is_quantized(V->type)) {
                 if (Q->ne[1] == 1) {

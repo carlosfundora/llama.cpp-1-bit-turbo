@@ -42,6 +42,7 @@ public:
         has_shift = false;
 
         used.clear();
+        free_blocks.set(); // All blocks are free
 
         for (uint32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
             seq_pos[s].clear();
@@ -65,6 +66,9 @@ public:
         ext.resize(n);
         shift.resize(n);
         seq.resize(n);
+
+        free_blocks.resize(n);
+        free_blocks.set();
 
         reset();
     }
@@ -165,10 +169,12 @@ public:
 
             if (pos[idx] == -1 && other.pos[j] != -1) {
                 used.insert(i + j);
+                free_blocks.reset(i + j); // No longer free
             }
 
             if (pos[idx] != -1 && other.pos[j] == -1) {
                 used.erase(i + j);
+                free_blocks.set(i + j); // Now free
             }
 
             if (pos[idx] != -1) {
@@ -196,10 +202,12 @@ public:
 
             if (pos[idx] == -1 && other.pos[j] != -1) {
                 used.insert(idx);
+                free_blocks.reset(idx);
             }
 
             if (pos[idx] != -1 && other.pos[j] == -1) {
                 used.erase(idx);
+                free_blocks.set(idx);
             }
 
             if (pos[idx] != -1) {
@@ -231,6 +239,7 @@ public:
         shift[i] = 0;
 
         used.erase(i);
+        free_blocks.set(i);
     }
 
     // note: call only if the cell has seq_id
@@ -250,6 +259,7 @@ public:
             shift[i] = 0;
 
             used.erase(i);
+            free_blocks.set(i);
 
             return true;
         }
@@ -280,6 +290,7 @@ public:
             shift[i] = 0;
 
             used.erase(i);
+            free_blocks.set(i);
 
             return true;
         }
@@ -400,6 +411,7 @@ public:
         pos[i] = p;
 
         used.insert(i);
+        free_blocks.reset(i);
     }
 
     void ext_set(uint32_t i, llama_kv_cell_ext p) {
@@ -427,6 +439,7 @@ public:
             shift[i] = 0;
 
             used.erase(i);
+            free_blocks.set(i);
 
             return true;
         }
@@ -457,6 +470,30 @@ public:
 
 private:
     bool has_shift = false;
+
+public:
+    // TurboMind-style efficient block tracking (available free cells)
+    // Uses a dynamic bitset to provide O(1)/O(64) search time for empty cells
+    struct dynamic_bitset {
+        std::vector<uint64_t> bits;
+        uint32_t n = 0;
+
+        void resize(uint32_t size) {
+            n = size;
+            bits.resize((size + 63) / 64, 0);
+        }
+        void set() { for(auto& b : bits) b = ~0ULL; }
+        void set(uint32_t i) { bits[i/64] |= (1ULL << (i%64)); }
+        void reset(uint32_t i) { bits[i/64] &= ~(1ULL << (i%64)); }
+
+        uint32_t find_first() const { return find_next(0); }
+        uint32_t find_next(uint32_t start) const {
+            for (uint32_t i = start; i < n; i++) {
+                if (bits[i/64] & (1ULL << (i%64))) return i;
+            }
+            return n;
+        }
+    } free_blocks;
 
     // set of indices of used cells (i.e. pos[i] != -1, allowed to not have any seq_id)
     std::set<uint32_t> used;
