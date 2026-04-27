@@ -186,6 +186,18 @@ llm_build_lfm2<iswa>::llm_build_lfm2(const llama_model & model, const llm_graph_
     cb(cur, "result_norm", -1);
     res->t_embd = cur;
 
+    // In embeddings mode we don't need vocab logits; the graph runner will
+    // call build_dense_out() to apply dense_2 (and optional dense_3) on
+    // top of t_embd / t_embd_pooled. This is required for LFM2-ColBERT,
+    // whose GGUF has no `output.weight` and provides a `dense_2.weight`
+    // [n_embd x n_embd_out] projection (e.g. 1024 -> 128). Mirroring the
+    // BERT/ModernBERT path also avoids a segfault in build_lora_mm when
+    // model.output is a duplicated tok_embd not intended as an LM head.
+    if (cparams.embeddings) {
+        ggml_build_forward_expand(gf, cur);
+        return;
+    }
+
     cur = build_lora_mm(model.output, cur);
     cb(cur, "result_output", -1);
 
