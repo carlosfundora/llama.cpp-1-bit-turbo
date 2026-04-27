@@ -9,3 +9,8 @@ Action: For high-performance C++ inference engines like llama.cpp, avoid importi
  2026-04-25 - C++ Abstraction Penalty
 Learning: Enterprise standard C++ serving engines (like Triton Inference Server) suffer from an abstraction penalty. Their deep, heavily templated, virtual interface-driven architectures provide extreme multi-backend flexibility at the cost of massive compile times, brittle build chains, and poor developer experience for core logic tracing.
 Action: When extracting features from enterprise C++ systems, prioritize algorithmic translation over structural porting. We should steal the dynamic batching heuristics, not the abstract class hierarchies.
+
+
+2026-04-27 - C++ Orchestrator API Boundary Isolation
+Learning: Ollama demonstrates that a clean API routing boundary (Go/HTTP) completely separated from execution engine logic prevents orchestrator responsibilities from leaking into the tensor execution layer, resulting in superior DX.
+Action: For our engine, ensure any HTTP or external interface routing strictly adheres to the 'Ollama pattern' of abstracting the backend engine behind a narrow API boundary, and avoid the vLLM pitfall of heavily coupling web frameworks (FastAPI) and orchestration (Ray) with tensor execution logic.
