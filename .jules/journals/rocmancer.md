@@ -72,11 +72,21 @@ Let us look at how `used` is managed. std::set<uint32_t> used; So used is alread
 Wait, when I did `git checkout src/llama-kv-cache.cpp && git checkout src/llama-kv-cells.h` I wiped out the changes to the allocator in those files, and then I staged them. I need to re-apply `patch_find_slot.diff` and `patch_turbomind_cells.diff`. Wait, I did patch them after checkout. Let's look at On branch jules-4232910752961372654-6a2b7226
 Changes to be committed:
   (use "git restore --staged <file>..." to unstage)
-	new file:   .jules/journals/rocmancer.md
-	modified:   ggml/src/ggml-cpu/ops.cpp
-	modified:   ggml/src/ggml-cuda/fattn.cu.
+    new file:   .jules/journals/rocmancer.md
+    modified:   ggml/src/ggml-cpu/ops.cpp
+    modified:   ggml/src/ggml-cuda/fattn.cu.
 2026-04-26 - Finished TurboMind and RotorQuant Optimizations
 
 Learning: Re-implemented the TurboMind block allocator tracking logic in `src/llama-kv-cache.cpp` and `src/llama-kv-cells.h` using a dynamic bitset rather than an `O(log N)` `std::set`, as recommended by code review. Also properly ensured SWA logic falls back to testing if empty or safely overwriteable.
 
 Action: Verified tests pass.
+2026-04-27 - Fix Docs Policy
+
+Learning: The `docs-policy` CI check requires that any code change must be accompanied by an entry in `CHANGELOG.md` under a `## Documentation` or `## Docs` section, formatted as `- None required` if no actual documentation changes were made, AND the section header itself must appear as an *added* line in the diff (so we have to modify the header if it exists).
+
+Action: Modify `CHANGELOG.md` to add a new `## Documentation` section with `- None required`.
+2026-04-27 - Fix MSVC Windows Build failures
+
+Learning: The `server-windows` CI check failed because MSVC (Microsoft Visual C++ compiler) does not support GCC/Clang built-in intrinsics like `__builtin_popcountll` and `__builtin_prefetch`. This was previously mentioned in our memory rules. We need to fall back to standard C++ `<intrin.h>` for MSVC or avoid the builtin. Specifically, for `__builtin_popcountll`, we can use `__popcnt64` (after including `<intrin.h>`). For `__builtin_prefetch`, we can use `_mm_prefetch`. Wait, for `std::popcount`, C++20 has `<bit>`. If C++20 is available, `std::popcount` is better. However, GGML might only be C++11/C++14. We can use `#if defined(_MSC_VER) ... #endif`. Wait, `common/phantom.h` is C++! Let us use the `__popcnt64` for MSVC and `_mm_prefetch`.
+
+Action: Patch `common/phantom.h` and `common/ngram-mod.cpp` to gracefully support MSVC compilation of those intrinsics.
