@@ -9,3 +9,7 @@ Action: For high-performance C++ inference engines like llama.cpp, avoid importi
  2026-04-25 - C++ Abstraction Penalty
 Learning: Enterprise standard C++ serving engines (like Triton Inference Server) suffer from an abstraction penalty. Their deep, heavily templated, virtual interface-driven architectures provide extreme multi-backend flexibility at the cost of massive compile times, brittle build chains, and poor developer experience for core logic tracing.
 Action: When extracting features from enterprise C++ systems, prioritize algorithmic translation over structural porting. We should steal the dynamic batching heuristics, not the abstract class hierarchies.
+
+2026-04-26 - Orchestrator vs Engine Dependency Footprint
+Learning: The dependency footprint of "Engine" repositories (vLLM, TGI) is universally massive and brittle, heavily tied to the rapidly changing Python ML ecosystem (PyTorch, exact versions of Transformers). Conversely, "Orchestrator" repositories (Ollama) maintain lean, stable dependencies by isolating execution behind a process or network boundary.
+Action: For a native C/C++ engine like llama.cpp, explicitly reject any feature extraction that requires importing Python ML ecosystem dependencies into the core logic path. Maintain strict C/C++ dependency isolation.
