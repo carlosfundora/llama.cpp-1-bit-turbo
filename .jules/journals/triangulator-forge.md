@@ -14,3 +14,7 @@ Action: When extracting features from enterprise C++ systems, prioritize algorit
 2026-04-27 - C++ Orchestrator API Boundary Isolation
 Learning: Ollama demonstrates that a clean API routing boundary (Go/HTTP) completely separated from execution engine logic prevents orchestrator responsibilities from leaking into the tensor execution layer, resulting in superior DX.
 Action: For our engine, ensure any HTTP or external interface routing strictly adheres to the 'Ollama pattern' of abstracting the backend engine behind a narrow API boundary, and avoid the vLLM pitfall of heavily coupling web frameworks (FastAPI) and orchestration (Ray) with tensor execution logic.
+
+2026-04-28 - Architectural Entanglement vs Adapter Boundaries
+Learning: The audit of vLLM, SGLang, and Ollama revealed that high-performance engines (vLLM, SGLang) heavily entangle their novel algorithmic optimizations (PagedAttention, Radix caching) with heavy ML frameworks (PyTorch, Ray). Orchestrators (Ollama) maintain clean adapter boundaries (Go/REST vs C++ Execution) but lack algorithmic execution novelty.
+Action: To achieve peak performance without dependency lock-in, we must systematically decouple novel algorithms (e.g., Radix KV caching) from their original Python/PyTorch implementations and port them as pure C++ components into our engine, while adopting Ollama's strict adapter boundaries for any HTTP/routing layers.
