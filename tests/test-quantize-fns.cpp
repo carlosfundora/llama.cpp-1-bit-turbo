@@ -48,30 +48,15 @@ static float array_rmse(const float * a1, const float * a2, size_t n) {
     return sqrtf(sum) / n;
 }
 
-// Total quantization error on test data
-static float total_quantization_error(const ggml_type_traits * qfns, const ggml_type_traits_cpu * qfns_cpu, size_t test_size, const float * test_data) {
+// Reference quantization error on test data
+static float reference_quantization_error(const ggml_type_traits * qfns, size_t test_size, const float * test_data, const float * optimized_out) {
     std::vector<uint8_t> tmp_q(2*test_size);
-    std::vector<float> tmp_out(test_size);
-
-    qfns_cpu->from_float(test_data, tmp_q.data(), test_size);
-    qfns->to_float(tmp_q.data(), tmp_out.data(), test_size);
-    return array_rmse(test_data, tmp_out.data(), test_size);
-}
-
-// Total quantization error on test data
-static float reference_quantization_error(const ggml_type_traits * qfns, const ggml_type_traits_cpu * qfns_cpu, size_t test_size, const float * test_data) {
-    std::vector<uint8_t> tmp_q(2*test_size);
-    std::vector<float> tmp_out(test_size);
     std::vector<float> tmp_out_ref(test_size);
-
-    // FIXME: why is done twice?
-    qfns_cpu->from_float(test_data, tmp_q.data(), test_size);
-    qfns->to_float(tmp_q.data(), tmp_out.data(), test_size);
 
     qfns->from_float_ref(test_data, tmp_q.data(), test_size);
     qfns->to_float(tmp_q.data(), tmp_out_ref.data(), test_size);
 
-    return array_rmse(tmp_out.data(), tmp_out_ref.data(), test_size);
+    return array_rmse(optimized_out, tmp_out_ref.data(), test_size);
 }
 
 static float dot_product(const float * a1, const float * a2, size_t test_size) {
@@ -145,7 +130,13 @@ int main(int argc, char * argv[]) {
         ggml_quantize_init(ei);
 
         if (qfns_cpu->from_float && qfns->to_float) {
-            const float total_error = total_quantization_error(qfns, qfns_cpu, test_size, test_data.data());
+            std::vector<uint8_t> tmp_q(2*test_size);
+            std::vector<float> tmp_out(test_size);
+
+            qfns_cpu->from_float(test_data.data(), tmp_q.data(), test_size);
+            qfns->to_float(tmp_q.data(), tmp_out.data(), test_size);
+
+            const float total_error = array_rmse(test_data.data(), tmp_out.data(), test_size);
             const float max_quantization_error =
                 (type == GGML_TYPE_Q1_0 || type == GGML_TYPE_Q1_0_g128) ? MAX_QUANTIZATION_TOTAL_ERROR_BINARY :
                 type == GGML_TYPE_TQ1_0   ? MAX_QUANTIZATION_TOTAL_ERROR_TERNARY :
@@ -162,7 +153,7 @@ int main(int argc, char * argv[]) {
                 printf("%5s absolute quantization error:    %s (%f)\n", ggml_type_name(type), RESULT_STR[failed], total_error);
             }
 
-            const float reference_error = reference_quantization_error(qfns, qfns_cpu, test_size, test_data.data());
+            const float reference_error = reference_quantization_error(qfns, test_size, test_data.data(), tmp_out.data());
             failed = !(reference_error < MAX_QUANTIZATION_REFERENCE_ERROR);
             num_failed += failed;
             if (failed || verbose) {
