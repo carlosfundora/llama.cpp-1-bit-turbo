@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# flake8: noqa
 """
 spec_harness.py — Reusable speculative decoding validation tool.
 

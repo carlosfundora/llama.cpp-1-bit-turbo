@@ -37,3 +37,13 @@ include = [
 [overrides.rules]
 unresolved-reference = "ignore"
 unresolved-import = "ignore"
+
+
+[[overrides]]
+include = [
+    "./scripts/spec_harness.py",
+]
+
+[overrides.rules]
+unresolved-import = "ignore"
+unresolved-reference = "ignore"
