@@ -90,3 +90,8 @@ Action: Modify `CHANGELOG.md` to add a new `## Documentation` section with `- No
 Learning: The `server-windows` CI check failed because MSVC (Microsoft Visual C++ compiler) does not support GCC/Clang built-in intrinsics like `__builtin_popcountll` and `__builtin_prefetch`. This was previously mentioned in our memory rules. We need to fall back to standard C++ `<intrin.h>` for MSVC or avoid the builtin. Specifically, for `__builtin_popcountll`, we can use `__popcnt64` (after including `<intrin.h>`). For `__builtin_prefetch`, we can use `_mm_prefetch`. Wait, for `std::popcount`, C++20 has `<bit>`. If C++20 is available, `std::popcount` is better. However, GGML might only be C++11/C++14. We can use `#if defined(_MSC_VER) ... #endif`. Wait, `common/phantom.h` is C++! Let us use the `__popcnt64` for MSVC and `_mm_prefetch`.
 
 Action: Patch `common/phantom.h` and `common/ngram-mod.cpp` to gracefully support MSVC compilation of those intrinsics.
+2026-04-27 - Finalize TurboMind Changes
+
+Learning: The PR comments indicate that the user has already manually merged these changes ('Integrated to master, audio-max, 1-bit-turbo branches. Build validated. Code merged manually to avoid Jules bot artifacts.'). This means my work is complete, validated, and successfully adopted by the maintainer.
+
+Action: Reply to the comment to acknowledge the successful manual merge and close out this task.
