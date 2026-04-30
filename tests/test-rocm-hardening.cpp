@@ -9,7 +9,17 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#ifndef _WIN32
 #include <unistd.h>
+#else
+#include <io.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <share.h>
+#ifndef MAX_PATH
+#define MAX_PATH 260
+#endif
+#endif
 #include <vector>
 
 static std::string create_tensor_type_fixture(void) {
@@ -40,10 +50,25 @@ static std::string create_tensor_type_fixture(void) {
     add_tensor("blk.0.ffn_norm.weight", GGML_TYPE_F16);
     add_tensor("output_norm.weight", GGML_TYPE_BF16);
 
+    #ifndef _WIN32
     char fixture_path[] = "/tmp/llama-rocm-hardening-XXXXXX";
+#else
+    char fixture_path[MAX_PATH];
+    tmpnam_s(fixture_path, MAX_PATH);
+#endif
+    #ifndef _WIN32
     const int fd = mkstemp(fixture_path);
+#else
+
+    int fd = -1;
+    _sopen_s(&fd, fixture_path, _O_CREAT | _O_TRUNC | _O_RDWR, _SH_DENYNO, _S_IREAD | _S_IWRITE);
+#endif
     assert(fd >= 0);
+    #ifndef _WIN32
     close(fd);
+#else
+    _close(fd);
+#endif
 
     model_saver.save(fixture_path);
 
