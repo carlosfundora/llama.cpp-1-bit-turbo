@@ -12,7 +12,23 @@ import { MimeTypeAudio } from '$lib/enums';
  * - Multiple format support with fallback (WAV, WebM, MP4, AAC)
  * - Real-time recording state tracking
  * - Proper cleanup and resource management
+ *
+ * **Configuration:**
+ * - Set `window.__AUDIO_CAPTURE_ENABLED = true` to enable audio capture
+ * - Default: false (disabled to prevent system audio loopback)
  */
+
+declare global {
+	interface Window {
+		__AUDIO_CAPTURE_ENABLED?: boolean;
+	}
+}
+
+function isAudioCaptureEnabled(): boolean {
+	if (typeof window === 'undefined') return false;
+	return window.__AUDIO_CAPTURE_ENABLED === true;
+}
+
 export class AudioRecorder {
 	private mediaRecorder: MediaRecorder | null = null;
 	private audioChunks: Blob[] = [];
@@ -20,6 +36,13 @@ export class AudioRecorder {
 	private recordingState: boolean = false;
 
 	async startRecording(): Promise<void> {
+		if (!isAudioCaptureEnabled()) {
+			throw new Error(
+				'Audio capture is disabled. To enable: set window.__AUDIO_CAPTURE_ENABLED = true in browser console. ' +
+				'Otherwise use DEMERZEL audio_orchestrator_v3 endpoints (port 30020).'
+			);
+		}
+
 		try {
 			this.stream = await navigator.mediaDevices.getUserMedia({
 				audio: {
