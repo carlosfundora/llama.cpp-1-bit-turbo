@@ -270,4 +270,3 @@ __kernel void mul_mm_f16_f32_kq(
     uint subMatrixCStartInElements = depth_B * N * M + row * M + col;
     mm_store_c_N(matrix_C, regC0, regC1, subMatrixCStartInElements, line_stride_matrix_C_in_bytes, (N-block_id_n*32));
 }
-

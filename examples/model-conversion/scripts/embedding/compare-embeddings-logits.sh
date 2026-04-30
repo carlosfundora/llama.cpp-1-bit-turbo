@@ -81,4 +81,3 @@ fi
 
 # Execute the command
 eval $SEMANTIC_CMD
-

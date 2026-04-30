@@ -65,7 +65,7 @@
         {%- else %}
             {{- '[SYSTEM_PROMPT]' + message['content'][0]['text'] + '[/SYSTEM_PROMPT]' }}
         {%- endif %}
-        
+
 
     {%- elif message['role'] == 'assistant' %}
         {%- if message['content'] is string %}

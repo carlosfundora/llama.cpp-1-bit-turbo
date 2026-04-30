@@ -22,4 +22,3 @@ runs:
         path: ${{ inputs.path }}
         type: z
         strip: 1
-

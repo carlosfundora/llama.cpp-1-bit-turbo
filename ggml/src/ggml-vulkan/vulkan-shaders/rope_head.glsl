@@ -17,4 +17,3 @@ layout (binding = 4) readonly buffer I {uvec2 rope_data_i[];}; // indices for se
 layout (push_constant) uniform parameter {
     rope_params pc;
 };
-

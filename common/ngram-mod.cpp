@@ -134,7 +134,7 @@ int common_ngram_mod::draft_rolling(const entry_t * ctx, int max_draft, entry_t 
         if (i + 1 < max_draft) {
             // Speculative prefetch: assume out[i] will be valid, pre-hash next
             const size_t next_idx = mask ? (h & mask) : (h % entries.size());
-            __builtin_prefetch(&entries[next_idx], 0, 1);
+            prefetch_for_read(&entries[next_idx], 0, 1);
         }
 
         tok = get_by_hash(h);

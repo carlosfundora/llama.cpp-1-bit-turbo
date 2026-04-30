@@ -1966,4 +1966,3 @@ static void test_tagged_args_with_embedded_quotes(testing & t) {
         }
     }
 }
-

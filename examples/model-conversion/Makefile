@@ -232,4 +232,3 @@ hf-add-model-to-collection:
 .PHONY: clean
 clean:
 	@${RM} -rf data .converted_embedding_model.txt .converted_model.txt .embedding_model_name.txt .model_name.txt
-

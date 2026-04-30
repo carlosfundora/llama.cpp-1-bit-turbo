@@ -28,10 +28,10 @@
         You may call one or more functions to assist with the user query.
         Don't make assumptions about the arguments. You should infer the argument values from previous
         user responses and the system message.
-        Here are the available tools: 
+        Here are the available tools:
         <available_tools>
         {% for tool in tools %}{{ tool|string }}{% endfor %}
-        
+
         </available_tools>.
 
         Return all function calls as a list of JSON objects within <tool_calls></tool_calls> XML tags.
@@ -166,6 +166,6 @@
     {# ---------------- REASONING PROMPT BEFORE NEXT ASSISTANT ---------------- #}
     {%- if loop.last and add_generation_prompt and message['role'] != 'assistant' -%}
         {{ '\n<|begin_assistant|>\n' + reasoning_asst_turn_start }}
-    {%- endif -%} 
+    {%- endif -%}
 
 {%- endfor -%}

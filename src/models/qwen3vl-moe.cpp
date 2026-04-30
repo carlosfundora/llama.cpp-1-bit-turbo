@@ -137,4 +137,3 @@ llm_build_qwen3vlmoe::llm_build_qwen3vlmoe(const llama_model & model, const llm_
 
     ggml_build_forward_expand(gf, cur);
 }
-
