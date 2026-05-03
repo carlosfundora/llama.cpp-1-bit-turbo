@@ -37,6 +37,21 @@ static std::string format_time(const std::chrono::system_clock::time_point & now
     return res;
 }
 
+
+static void json_merge(json & target, const json & source) {
+    if (!target.is_object() || !source.is_object()) {
+        target = source;
+        return;
+    }
+    for (const auto & [key, value] : source.items()) {
+        if (target.contains(key) && target[key].is_object() && value.is_object()) {
+            json_merge(target[key], value);
+        } else {
+            target[key] = value;
+        }
+    }
+}
+
 static json safe_args_parse(const std::string & to_parse) {
     std::string stripped = to_parse;
     if (to_parse.at(0) == '"' && to_parse.at(to_parse.length() - 1) == '"') {
@@ -778,16 +793,10 @@ std::string common_chat_template_direct_apply(
         inp["tools"] = tools_override.has_value() ? *tools_override : inputs.tools;
     }
     if (inputs.extra_context.is_object()) {
-        // TODO: do we need to merge, or replacing is fine?
-        for (const auto & [k, v] : inputs.extra_context.items()) {
-            inp[k] = v;
-        }
+        json_merge(inp, inputs.extra_context);
     }
     if (additional_context.has_value()) {
-        // TODO: merge properly instead of overwriting (matching old behavior)
-        for (const auto & [k, v] : additional_context->items()) {
-            inp[k] = v;
-        }
+        json_merge(inp, *additional_context);
     }
     if (inputs.add_generation_prompt) {
         inp["add_generation_prompt"] = true;
