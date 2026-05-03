@@ -636,7 +636,7 @@ class ModelBase:
         expert_scales: dict[tuple[int, str], list[tuple[int, float]]] = {}
         expert_input_scales: dict[tuple[int, str], list[tuple[int, float]]] = {}
         expert_shapes: dict[tuple[int, str], list[int]] = {}
-        n_experts = self.find_hparam(["num_local_experts", "num_experts"], optional=True) or 0
+        n_experts = self.n_experts
         consumed: list[str] = []
 
         for name in list(self.model_tensors.keys()):
@@ -1046,6 +1046,13 @@ class TextModel(ModelBase):
         # would require using decorated functions instead of simply defining the property
         if "model_arch" not in cls.__dict__:
             raise TypeError(f"Missing property 'model_arch' for {cls.__name__!r}")
+
+
+    @property
+    def n_experts(self) -> int:
+        if not hasattr(self, "_n_experts"):
+            self._n_experts = self.find_hparam(["num_local_experts", "num_experts"], optional=True) or 0
+        return self._n_experts
 
     def set_vocab(self):
         self._set_vocab_gpt2()
@@ -3027,7 +3034,7 @@ class AfmoeModel(LlamaModel):
         # Handle expert weights - they're already merged in the HF format
         # process the experts separately
         if name.find("mlp.experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -4665,7 +4672,7 @@ class Qwen2MoeModel(TextModel):
             return
 
         if name.find("experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -5693,7 +5700,7 @@ class PhiMoeModel(Phi3MiniModel):
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         # process the experts separately
         if name.find("block_sparse_moe.experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -6105,7 +6112,7 @@ class KimiLinearModel(TextModel):
 
         # process the experts separately
         if name.find("block_sparse_moe.experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -6700,7 +6707,7 @@ class NomicBertModel(BertModel):
         if "mlp.experts.bias" in name:
             return # Explicitly return.
 
-        n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+        n_experts = self.n_experts
         if "mlp.experts.mlp.w1" in name:
             data_torch = data_torch.view(n_experts, self.hparams["n_inner"], self.hparams["n_embd"])
             name += ".weight"
@@ -8278,7 +8285,7 @@ class JambaModel(TextModel):
 
         # process the experts separately
         if ".feed_forward.experts." in name:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
 
             assert bid is not None
 
@@ -8444,7 +8451,7 @@ class OlmoeModel(TextModel):
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         # process the experts separately
         if name.find("experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -9130,7 +9137,7 @@ class MiniMaxM2Model(TextModel):
 
         # merge expert weights
         if 'experts' in name:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             expert_cache = self._experts_cache.setdefault(bid, {})
@@ -10409,7 +10416,7 @@ class ExaoneMoEModel(Exaone4Model):
             name = name.replace("e_score_correction_bias", "e_score_correction.bias")
 
         if name.find("mlp.experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -10916,7 +10923,7 @@ class BailingMoeModel(TextModel):
             yield from super().modify_tensors(v,self.format_tensor_name(gguf.MODEL_TENSOR.ATTN_V, bid), bid)
             return
         elif name.find("mlp.experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -10997,7 +11004,7 @@ class BailingMoeV2Model(TextModel):
 
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         if "mlp.experts" in name:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -11063,7 +11070,7 @@ class GroveMoeModel(TextModel):
 
         # process the experts separately
         if name.find("chunk_experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"]) // 2 # see add_experts_per_group
+            n_experts = self.n_experts // 2 # see add_experts_per_group
             assert bid is not None
 
             if self._chunk_experts is None:
@@ -11090,7 +11097,7 @@ class GroveMoeModel(TextModel):
             else:
                 return
         elif name.find("experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -11525,7 +11532,7 @@ class HunYuanMoEModel(TextModel):
                 return
 
         if name.find("mlp.experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -11580,7 +11587,7 @@ class LLaDAMoEModel(TextModel):
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         # process the experts separately
         if name.find("experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -11936,7 +11943,7 @@ class LFM2MoeModel(TextModel):
 
         # merge expert weights
         if 'experts' in name:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             expert_cache = self._experts_cache.setdefault(bid, {})
@@ -12095,7 +12102,7 @@ class SmallThinkerModel(TextModel):
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         # process the experts separately
         if name.find("experts") != -1:
-            n_experts = self.hparams.get("moe_num_primary_experts") or self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.hparams.get("moe_num_primary_experts") or self.n_experts
             assert bid is not None
 
             if self._experts is None:
