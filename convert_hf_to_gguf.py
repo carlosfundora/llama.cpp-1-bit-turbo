@@ -538,6 +538,12 @@ class ModelBase:
             raise ValueError(f"Can not map tensor {name!r}")
         return new_name
 
+
+
+    @property
+    def n_experts(self) -> int:
+        return self.find_hparam(["num_local_experts", "num_experts"], optional=True) or 0
+
     def set_gguf_parameters(self):
         raise NotImplementedError("set_gguf_parameters() must be implemented in subclasses")
 
@@ -636,7 +642,7 @@ class ModelBase:
         expert_scales: dict[tuple[int, str], list[tuple[int, float]]] = {}
         expert_input_scales: dict[tuple[int, str], list[tuple[int, float]]] = {}
         expert_shapes: dict[tuple[int, str], list[int]] = {}
-        n_experts = self.n_experts
+        n_experts = self.find_hparam(["num_local_experts", "num_experts"], optional=True) or 0
         consumed: list[str] = []
 
         for name in list(self.model_tensors.keys()):
@@ -1046,13 +1052,6 @@ class TextModel(ModelBase):
         # would require using decorated functions instead of simply defining the property
         if "model_arch" not in cls.__dict__:
             raise TypeError(f"Missing property 'model_arch' for {cls.__name__!r}")
-
-
-    @property
-    def n_experts(self) -> int:
-        if not hasattr(self, "_n_experts"):
-            self._n_experts = self.find_hparam(["num_local_experts", "num_experts"], optional=True) or 0
-        return self._n_experts
 
     def set_vocab(self):
         self._set_vocab_gpt2()
