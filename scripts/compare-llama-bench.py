@@ -349,7 +349,7 @@ class LlamaBenchDataSQLite3(LlamaBenchData):
             if self.build_len_min != self.build_len_max:
                 logger.warning("Data contains commit hashes of differing lengths. It's possible that the wrong commits will be compared. "
                                "Try purging the the database of old commits.")
-                self.cursor.execute(f"UPDATE {self.table_name} SET build_commit = SUBSTRING(build_commit, 1, {self.build_len_min});")
+                self.cursor.execute(f"UPDATE {self.table_name} SET build_commit = SUBSTRING(build_commit, 1, ?);", (self.build_len_min,))
 
             builds = self.cursor.execute(f"SELECT DISTINCT build_commit FROM {self.table_name};").fetchall()
             self.builds = list(map(lambda b: b[0], builds))  # list[tuple[str]] -> list[str]
@@ -373,12 +373,12 @@ class LlamaBenchDataSQLite3(LlamaBenchData):
             [f"tb.{p}" for p in properties] + ["tb.n_prompt", "tb.n_gen", "tb.n_depth", "AVG(tb.avg_ts)", "AVG(tc.avg_ts)"])
         equal_string = " AND ".join(
             [f"tb.{p} = tc.{p}" for p in LLAMA_BENCH_KEY_PROPERTIES] + [
-                f"tb.build_commit = '{hexsha8_baseline}'", f"tc.build_commit = '{hexsha8_compare}'"]
+                "tb.build_commit = ?", "tc.build_commit = ?"]
         )
         group_order_string = ", ".join([f"tb.{p}" for p in properties] + ["tb.n_gen", "tb.n_prompt", "tb.n_depth"])
         query = (f"SELECT {select_string} FROM {self.table_name} tb JOIN {self.table_name} tc ON {equal_string} "
                  f"GROUP BY {group_order_string} ORDER BY {group_order_string};")
-        return self.cursor.execute(query).fetchall()
+        return self.cursor.execute(query, (hexsha8_baseline, hexsha8_compare)).fetchall()
 
     def _get_rows_test_backend_ops(self, properties: list[str], hexsha8_baseline: str, hexsha8_compare: str) -> Sequence[tuple]:
         # For test-backend-ops, we compare FLOPS and bandwidth metrics (prioritizing FLOPS over bandwidth)
@@ -389,13 +389,13 @@ class LlamaBenchDataSQLite3(LlamaBenchData):
             ])
         equal_string = " AND ".join(
             [f"tb.{p} = tc.{p}" for p in TEST_BACKEND_OPS_KEY_PROPERTIES] + [
-                f"tb.build_commit = '{hexsha8_baseline}'", f"tc.build_commit = '{hexsha8_compare}'",
+                "tb.build_commit = ?", "tc.build_commit = ?",
                 "tb.supported = 1", "tc.supported = 1", "tb.passed = 1", "tc.passed = 1"]  # Only compare successful tests
         )
         group_order_string = ", ".join([f"tb.{p}" for p in properties])
         query = (f"SELECT {select_string} FROM {self.table_name} tb JOIN {self.table_name} tc ON {equal_string} "
                  f"GROUP BY {group_order_string} ORDER BY {group_order_string};")
-        return self.cursor.execute(query).fetchall()
+        return self.cursor.execute(query, (hexsha8_baseline, hexsha8_compare)).fetchall()
 
 
 class LlamaBenchDataSQLite3File(LlamaBenchDataSQLite3):
