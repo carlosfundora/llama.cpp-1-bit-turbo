@@ -1,6 +1,11 @@
 #include "ggml.h"
 #include "gguf.h"
 
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include "../src/llama-arch.h"
 #include "../src/llama-model-loader.h"
 #include "../src/llama-model-saver.h"
@@ -9,7 +14,9 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#if !defined(_WIN32)
 #include <unistd.h>
+#endif
 #include <vector>
 
 static std::string create_tensor_type_fixture(void) {
@@ -40,10 +47,17 @@ static std::string create_tensor_type_fixture(void) {
     add_tensor("blk.0.ffn_norm.weight", GGML_TYPE_F16);
     add_tensor("output_norm.weight", GGML_TYPE_BF16);
 
+#if defined(_WIN32)
+    char fixture_path[MAX_PATH];
+    char tmp_path[MAX_PATH];
+    GetTempPathA(MAX_PATH, tmp_path);
+    GetTempFileNameA(tmp_path, "llama-rocm-hardening", 0, fixture_path);
+#else
     char fixture_path[] = "/tmp/llama-rocm-hardening-XXXXXX";
     const int fd = mkstemp(fixture_path);
     assert(fd >= 0);
     close(fd);
+#endif
 
     model_saver.save(fixture_path);
 
