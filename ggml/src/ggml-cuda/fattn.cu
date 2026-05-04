@@ -493,6 +493,12 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
 
     // If there are no tensor cores available, use the generic tile kernel:
     if (can_use_vector_kernel) {
+        if (GGML_CUDA_CC_IS_RDNA2(cc) && Q->ne[1] <= 4) {
+            // RDNA2 benefits significantly from the vector kernel for small decode batches,
+            // even if GQA applies, as the fallback tile kernel is bandwidth constrained and slow.
+            return BEST_FATTN_KERNEL_VEC;
+        }
+
         if (!ggml_is_quantized(K->type) && !ggml_is_quantized(V->type)) {
             if (Q->ne[1] == 1) {
                 if (!gqa_opt_applies) {

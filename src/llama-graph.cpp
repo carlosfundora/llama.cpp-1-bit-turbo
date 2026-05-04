@@ -1041,7 +1041,22 @@ ggml_tensor * llm_graph_context::build_norm(
     }
 
     if (mw) {
-        cur = ggml_mul(ctx0, cur, mw);
+        ggml_tensor * norm_w = mw;
+        if (loras) {
+            for (const auto & lora : *loras) {
+                llama_adapter_lora_weight * lw = lora.first->get_weight(mw);
+                if (lw == nullptr || lw->a == nullptr) {
+                    continue;
+                }
+
+                const float adapter_scale = lora.second;
+                ggml_tensor * delta = ggml_sub(ctx0, lw->a, mw);
+                ggml_tensor * scaled_delta = ggml_scale(ctx0, delta, adapter_scale);
+                norm_w = ggml_add(ctx0, norm_w, scaled_delta);
+            }
+        }
+
+        cur = ggml_mul(ctx0, cur, norm_w);
         if (mb) {
             cb(cur, "norm_w", il);
         }

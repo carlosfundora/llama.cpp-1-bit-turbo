@@ -1,0 +1,148 @@
+name: portable-build
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+  schedule:
+    - cron: "55 7 * * *"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: llama-cpp-1-bit-turbo-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cmake-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build build-essential
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j2
+
+      - name: CLI smoke
+        run: |
+          ./build/bin/llama-cli --help || true
+          ./build/bin/llama-server --help || true
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-cpp-1-bit-turbo-build-logs
+          path: |
+            build
+          if-no-files-found: ignore
+
+  docs-policy:
+    if: always() && github.event_name == 'pull_request'
+    needs: [cmake-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Evaluate documentation policy
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python - <<'PY'
+          import os, re, subprocess
+          from pathlib import Path
+          base_ref = os.environ['BASE_REF']
+          subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', base_ref], check=True)
+          diff_text = subprocess.check_output(['git', 'diff', '--name-status', '--find-renames', f'origin/{base_ref}...HEAD'], text=True)
+          def is_doc(path: str) -> bool:
+              name = os.path.basename(path)
+              return path == 'CHANGELOG.md' or path.startswith('docs/') or path.endswith('.md') or name.startswith('README')
+          def is_codeish(path: str) -> bool:
+              return not is_doc(path) and not path.startswith('.github/') and path not in {'LICENSE','LICENSE.md','LICENSE.txt','.gitignore','.gitattributes'}
+          changes=[]
+          for raw in diff_text.splitlines():
+              parts=raw.split('\t')
+              if not parts: continue
+              status=parts[0]
+              if status.startswith('R') and len(parts)>=3: changes.append({'status':'R','path':parts[2]})
+              elif len(parts)>=2: changes.append({'status':status,'path':parts[1]})
+          changed_paths=[c['path'] for c in changes]
+          changelog_changed='CHANGELOG.md' in changed_paths
+          docs_changed=sorted({c['path'] for c in changes if is_doc(c['path']) and c['path']!='CHANGELOG.md'})
+          docs_added=sorted({c['path'] for c in changes if c['status']=='A' and is_doc(c['path']) and c['path']!='CHANGELOG.md'})
+          docs_modified=sorted({c['path'] for c in changes if c['status'] in {'M','R'} and is_doc(c['path']) and c['path']!='CHANGELOG.md'})
+          code_changed=sorted({c['path'] for c in changes if is_codeish(c['path'])})
+          changelog_diff=subprocess.check_output(['git','diff',f'origin/{base_ref}...HEAD','--','CHANGELOG.md'],text=True) if changelog_changed else ''
+          added_lines=[l[1:] for l in changelog_diff.splitlines() if l.startswith('+') and not l.startswith('+++')]
+          docs_header_present=any(re.match(r'#{2,4}\s*(Documentation|Docs)\b', l.strip(), re.I) for l in added_lines)
+          entry_re=re.compile(r'^\s*-\s*(Added|Updated|Removed|Created)\s*:\s*(.+?)\s*$', re.I)
+          none_re=re.compile(r'^\s*-\s*None required\s*$', re.I)
+          listed_docs=set(); has_none_required=False
+          for l in added_lines:
+              m=entry_re.match(l)
+              if m: listed_docs.add(m.group(2).strip().strip('`'))
+              if none_re.match(l): has_none_required=True
+          failures=[]
+          if not changelog_changed: failures.append('`CHANGELOG.md` was not updated in this PR.')
+          if not docs_header_present: failures.append('`CHANGELOG.md` diff does not include a `Documentation` or `Docs` section.')
+          if not docs_changed and not listed_docs and not has_none_required: failures.append('The changelog documentation section must list changed docs or include `- None required`.')
+          if code_changed and not docs_changed: failures.append('Code or configuration files changed, but no documentation files were updated.')
+          if code_changed and has_none_required: failures.append('`- None required` cannot be used when code or configuration files changed.')
+          if code_changed and docs_added and not docs_modified: failures.append('Documentation files were only added. At least one existing documentation file must also be updated when code changes.')
+          if docs_changed and has_none_required: failures.append('`- None required` cannot be used when documentation files changed.')
+          for p in docs_changed:
+              if p not in listed_docs: failures.append(f'Changed documentation file not listed in `CHANGELOG.md`: `{p}`.')
+          for p in sorted(listed_docs):
+              if p not in docs_changed: failures.append(f'Documentation file listed in `CHANGELOG.md` was not changed in this PR: `{p}`.')
+          lines=['<!-- docs-policy-comment -->','## Documentation policy check','']
+          if failures:
+              lines += ['❌ Documentation policy failed.','','### Problems found'] + [f'- {f}' for f in failures]
+          else:
+              lines.append('✅ Documentation policy passed.')
+          lines += ['', '### Changed documentation files'] + ([f'- `{p}`' for p in docs_changed] if docs_changed else ['- None'])
+          lines += ['', '### Changed code/config files'] + ([f'- `{p}`' for p in code_changed] if code_changed else ['- None'])
+          Path('docs-policy-report.md').write_text('\n'.join(lines)+'\n')
+          Path('docs-policy-status.txt').write_text('fail\n' if failures else 'pass\n')
+          PY
+
+      - name: Create or update documentation policy comment
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('docs-policy-report.md', 'utf8');
+            const status = fs.readFileSync('docs-policy-status.txt', 'utf8').trim();
+            const marker = '<!-- docs-policy-comment -->';
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner: context.repo.owner, repo: context.repo.repo, issue_number, per_page: 100 });
+            const existing = comments.find(comment => comment.body && comment.body.includes(marker));
+            if (status === 'fail') {
+              if (existing) {
+                await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body });
+              } else {
+                await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number, body });
+              }
+            } else if (existing) {
+              await github.rest.issues.deleteComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id });
+            }
+
+      - name: Enforce documentation policy
+        run: test "$(cat docs-policy-status.txt)" = "pass"

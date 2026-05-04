@@ -343,4 +343,3 @@ void ggml_sycl_repeat(ggml_backend_sycl_context & ctx, ggml_tensor * dst) {
     scope_op_debug_print scope_dbg_print(__func__, dst, /*num_src=*/1);
     ggml_sycl_op_repeat(ctx, dst);
 }
-

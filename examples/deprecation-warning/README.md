@@ -46,4 +46,3 @@ Please update all scripts and workflows to use the new binary names.
 | speculative | llama-speculative |
 | vdot | llama-vdot |
 | tests/test-c.o | tests/test-c.o |
-

@@ -145,3 +145,7 @@ poetry.toml
 /.windsurf/
 # emscripten
 a.out.*
+node_modules/
+__pycache__/
+target/
+coverage/

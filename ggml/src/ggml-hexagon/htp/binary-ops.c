@@ -869,4 +869,3 @@ int op_binary(struct htp_ops_context * octx) {
 
     return HTP_STATUS_NO_SUPPORT;
 }
-

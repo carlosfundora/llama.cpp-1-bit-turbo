@@ -124,18 +124,18 @@ void dequantize_q1_0(device const block_q1_0 * xb, short il, thread type4x4 & re
     const float d = xb->d;
 
     float4x4 reg_f;
-    
+
     // Process 16 bits (2 bytes) for each call, since we have il=0,1
     const int offset = il * 16;
-    
+
     for (int i = 0; i < 16; i++) {
         const int bit_idx = offset + i;
         const int byte_idx = bit_idx / 8;
         const int bit_offset = bit_idx % 8;
-        
+
         const bool bit_val = (qs[byte_idx] >> bit_offset) & 1;
         const float val = bit_val ? d : -d;
-        
+
         reg_f[i/4][i%4] = val;
     }
 
@@ -148,15 +148,15 @@ void dequantize_q1_0_t4(device const block_q1_0 * xb, short il, thread type4 & r
     const float d = xb->d;
 
     float4 reg_f;
-    
+
     // Process 4 bits for each call
     const int offset = il * 4;
-    
+
     for (int i = 0; i < 4; i++) {
         const int bit_idx = offset + i;
         const int byte_idx = bit_idx / 8;
         const int bit_offset = bit_idx % 8;
-        
+
         const bool bit_val = (qs[byte_idx] >> bit_offset) & 1;
         reg_f[i] = bit_val ? d : -d;
     }
@@ -208,15 +208,15 @@ void dequantize_q1_0_g128_t4(device const block_q1_0_g128 * xb, short il, thread
     const float d = xb->d;
 
     float4 reg_f;
-    
+
     // Process 4 bits for each call
     const int offset = il * 4;
-    
+
     for (int i = 0; i < 4; i++) {
         const int bit_idx = offset + i;
         const int byte_idx = bit_idx / 8;
         const int bit_offset = bit_idx % 8;
-        
+
         const bool bit_val = (qs[byte_idx] >> bit_offset) & 1;
         reg_f[i] = bit_val ? d : -d;
     }
@@ -3227,23 +3227,23 @@ kernel void kernel_group_norm_f32(
 // we assume that the yl's have been multiplied with the appropriate scale factor
 inline float block_q_n_dot_y(device const block_q1_0 * qb_curr, float sumy, thread float * yl, int il) {
     float d = qb_curr->d;
-    
+
     float acc = 0.0f;
-    
+
     // il represents which half of the block (0 or 16)
     // 16 weights = 16 bits = 2 bytes
     // il=0 → bytes 0-1 (bits 0-15), il=16 → bytes 2-3 (bits 16-31)
     // TODO: if we increase Q1_0 block size this might need to change
     const int byte_offset = il / 8;  // 0 or 2
     device const uint8_t * qs = qb_curr->qs + byte_offset;
-    
+
     for (int i = 0; i < 16; i++) {
         const uint8_t byte_idx = i / 8;
         const uint8_t bit_idx = i % 8;
         const int8_t qval = ((qs[byte_idx] >> bit_idx) & 1) ? 1 : -1;
         acc += yl[i] * qval;
     }
-    
+
     return d * acc;
 }
 
@@ -3252,21 +3252,21 @@ inline float block_q_n_dot_y(device const block_q1_0 * qb_curr, float sumy, thre
 // we assume that the yl's have been multiplied with the appropriate scale factor
 inline float block_q_n_dot_y(device const block_q1_0_g128 * qb_curr, float sumy, thread float * yl, int il) {
     float d = qb_curr->d;
-    
+
     float acc = 0.0f;
-    
+
     // il represents which 16-element chunk of the 128-element block (0, 16, 32, ..., 112)
     // 16 weights = 16 bits = 2 bytes
     const int byte_offset = il / 8;
     device const uint8_t * qs = qb_curr->qs + byte_offset;
-    
+
     for (int i = 0; i < 16; i++) {
         const uint8_t byte_idx = i / 8;
         const uint8_t bit_idx = i % 8;
         const int8_t qval = ((qs[byte_idx] >> bit_idx) & 1) ? 1 : -1;
         acc += yl[i] * qval;
     }
-    
+
     return d * acc;
 }
 

@@ -37,4 +37,3 @@ ${BUILD_DIR}/bin/llama-perplexity -m $CONVERTED_MODEL \
     --kl-divergence-base $OUTPUTFILE
 
 echo "Generated logits in $OUTPUTFILE"
-
