@@ -38,4 +38,3 @@ found 2 SYCL devices:
 | 1| [level_zero:gpu:1]|                 Intel UHD Graphics 750|    1.3|     32|     512|   32| 62631M|            1.3.29138|
 
 ```
-

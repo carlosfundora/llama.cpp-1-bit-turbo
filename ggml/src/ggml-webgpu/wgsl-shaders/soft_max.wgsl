@@ -242,4 +242,3 @@ fn main(@builtin(workgroup_id) wid: vec3<u32>,
         col += WG_SIZE;
     }
 }
-
