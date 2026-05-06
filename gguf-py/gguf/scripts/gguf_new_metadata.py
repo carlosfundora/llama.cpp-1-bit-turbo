@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from harness.logger import UnifiedLogger
 import argparse
 import os
 import sys
@@ -17,7 +18,7 @@ if "NO_LOCAL_GGUF" not in os.environ and (Path(__file__).parent.parent.parent.pa
 
 import gguf
 
-logger = logging.getLogger("gguf-new-metadata")
+logger = UnifiedLogger.get_logger("gguf-new-metadata", domain="harness")
 
 
 class MetadataDetails(NamedTuple):

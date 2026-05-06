@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import time
 import logging
+from harness.logger import UnifiedLogger
 import argparse
 import subprocess
 import random
@@ -23,7 +24,7 @@ import cffi
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 
-logger = logging.getLogger("test-tokenizer-random")
+logger = UnifiedLogger.get_logger("test-tokenizer-random", domain="harness")
 
 
 class LibLlama:

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+from harness.logger import UnifiedLogger
 import os
 import pathlib
 import re
@@ -16,7 +17,7 @@ from enum import IntEnum, auto
 from transformers import AutoTokenizer
 
 logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger("convert_hf_to_gguf_update")
+logger = UnifiedLogger.get_logger("convert_hf_to_gguf_update", domain="harness")
 sess = requests.Session()
 
 convert_py_pth = pathlib.Path("convert_hf_to_gguf.py")

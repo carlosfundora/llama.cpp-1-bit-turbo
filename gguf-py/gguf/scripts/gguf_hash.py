@@ -5,6 +5,7 @@ import uuid
 import hashlib
 
 import logging
+from harness.logger import UnifiedLogger
 import argparse
 import os
 import sys
@@ -19,7 +20,7 @@ if "NO_LOCAL_GGUF" not in os.environ and (Path(__file__).parent.parent.parent.pa
 from gguf import GGUFReader  # noqa: E402
 
 
-logger = logging.getLogger("gguf-hash")
+logger = UnifiedLogger.get_logger("gguf-hash", domain="harness")
 
 # UUID_NAMESPACE_LLAMA_CPP = uuid.uuid5(uuid.NAMESPACE_URL, 'en.wikipedia.org/wiki/Llama.cpp')
 UUID_NAMESPACE_LLAMA_CPP = uuid.UUID('ef001206-dadc-5f6d-a15f-3359e577d4e5')

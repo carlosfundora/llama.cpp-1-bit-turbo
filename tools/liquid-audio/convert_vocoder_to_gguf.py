@@ -6,9 +6,10 @@ import argparse
 import gguf
 import json
 import logging
+from harness.logger import UnifiedLogger
 import torch
 
-logger = logging.getLogger()
+logger = UnifiedLogger.get_logger("convert-vocoder-to-gguf", domain="harness")
 
 
 class Lfm2AudioDecoderModelConverter:

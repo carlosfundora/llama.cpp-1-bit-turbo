@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import logging
+from harness.logger import UnifiedLogger
 import argparse
 import contextlib
 import json
@@ -54,7 +55,7 @@ except ImportError:
     )
 
 
-logger = logging.getLogger("hf-to-gguf")
+logger = UnifiedLogger.get_logger("hf-to-gguf", domain="harness")
 
 
 ###### MODEL DEFINITIONS ######

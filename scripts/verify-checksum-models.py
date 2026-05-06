@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-import logging
+from harness.logger import UnifiedLogger
 import os
 import hashlib
 
-logger = logging.getLogger("verify-checksum-models")
+logger = UnifiedLogger.get_logger("verify-checksum-models", domain="harness")
 
 
 def sha256sum(file):

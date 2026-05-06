@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from harness.logger import UnifiedLogger
 import argparse
 import concurrent.futures
 import enum
@@ -38,7 +39,7 @@ from gguf import BaseVocab, Vocab, NoVocab, BpeVocab, SentencePieceVocab, LlamaH
 if TYPE_CHECKING:
     from typing_extensions import Self, TypeAlias
 
-logger = logging.getLogger("convert")
+logger = UnifiedLogger.get_logger("convert", domain="harness")
 
 if hasattr(faulthandler, 'register') and hasattr(signal, 'SIGUSR1'):
     faulthandler.register(signal.SIGUSR1)

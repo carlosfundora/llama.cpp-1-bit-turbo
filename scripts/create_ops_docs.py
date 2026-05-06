@@ -5,6 +5,7 @@ This script parses docs/ops/*.csv and creates the ops.md, which is a table docum
 """
 import csv
 import logging
+from harness.logger import UnifiedLogger
 import sys
 from pathlib import Path
 from collections import defaultdict
@@ -20,7 +21,7 @@ class DocsGenerator:
         )
         self.all_operations: set[str] = set()
         self.all_backends: set[str] = set()
-        self.logger = logging.getLogger(__name__)
+        self.logger = UnifiedLogger.get_logger(__name__, domain="harness")
 
     def parse_support_files(self) -> None:
         if not self.ops_dir.exists():
