@@ -41,6 +41,7 @@ from typing import Annotated, Dict, List, Optional, Tuple
 import atexit
 import json
 import logging
+from harness.logger import UnifiedLogger
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -52,8 +53,8 @@ import typer
 
 sys.path.insert(0, Path(__file__).parent.parent.as_posix())
 if True:
-    from tools.server.tests.utils import ServerProcess
-    from tools.server.tests.unit.test_tool_call import do_test_calc_result, do_test_hello_world, do_test_weather
+    from harness.agents.tools.server.tests.utils import ServerProcess
+    from harness.agents.tools.server.tests.unit.test_tool_call import do_test_calc_result, do_test_hello_world, do_test_weather
 
 
 @contextmanager
@@ -72,7 +73,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(__name__)
+logger = UnifiedLogger.get_logger(__name__, domain="harness")
 
 app = typer.Typer()
 

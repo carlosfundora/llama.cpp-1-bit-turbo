@@ -11,6 +11,7 @@ from typing import Optional, Union
 
 import datasets
 import logging
+from harness.logger import UnifiedLogger
 import matplotlib.pyplot as plt
 import numpy as np
 import requests
@@ -18,7 +19,7 @@ from tqdm.contrib.concurrent import thread_map
 
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
-logger = logging.getLogger("server-bench")
+logger = UnifiedLogger.get_logger("server-bench", domain="harness")
 
 
 def get_prompts_text(dataset_name: str, n_prompts: int) -> Optional[list[str]]:

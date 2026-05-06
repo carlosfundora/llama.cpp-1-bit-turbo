@@ -5,6 +5,7 @@ import csv
 import heapq
 import json
 import logging
+from harness.logger import UnifiedLogger
 import os
 import sqlite3
 import sys
@@ -20,7 +21,7 @@ except ImportError as e:
     raise e
 
 
-logger = logging.getLogger("compare-llama-bench")
+logger = UnifiedLogger.get_logger("compare-llama-bench", domain="harness")
 
 # All llama-bench SQL fields
 LLAMA_BENCH_DB_FIELDS = [

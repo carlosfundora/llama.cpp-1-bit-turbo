@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 import ctypes
 import logging
+from harness.logger import UnifiedLogger
 import numpy as np
 
 # Necessary to load the local gguf package
@@ -23,7 +24,7 @@ import gguf
 from gguf.constants import GGMLQuantizationType
 
 
-logger = logging.getLogger("test-quants")
+logger = UnifiedLogger.get_logger("test-quants", domain="harness")
 
 
 c_float_p = ctypes.POINTER(ctypes.c_float)

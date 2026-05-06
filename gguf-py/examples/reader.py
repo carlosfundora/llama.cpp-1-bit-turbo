@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-import logging
+from harness.logger import UnifiedLogger
 import sys
 from pathlib import Path
 
-logger = logging.getLogger("reader")
+logger = UnifiedLogger.get_logger("reader", domain="harness")
 
 # Necessary to load the local gguf package
 sys.path.insert(0, str(Path(__file__).parent.parent))
