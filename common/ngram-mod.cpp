@@ -1,3 +1,12 @@
+
+#if defined(_MSC_VER) && (defined(_M_AMD64) || defined(_M_IX86))
+#include <intrin.h>
+#define prefetch_for_read(addr, rw, locality) _mm_prefetch((const char *)(addr), _MM_HINT_T0)
+#elif defined(__GNUC__) || defined(__clang__)
+#define prefetch_for_read(addr, rw, locality) __builtin_prefetch(addr, rw, locality)
+#else
+#define prefetch_for_read(addr, rw, locality)
+#endif
 #include "ngram-mod.h"
 
 //
