@@ -11836,10 +11836,14 @@ class LFM2Model(TextModel):
     model_arch = gguf.MODEL_ARCH.LFM2
 
     def _add_feed_forward_length(self):
-        ff_dim = self.hparams["block_ff_dim"]
+        # transformers' AutoConfig may strip block_ff_dim when
+        # block_auto_adjust_ff_dim=True (e.g. LFM2.5-Audio audio_detokenizer);
+        # fall back to intermediate_size which carries the same value.
+        ff_dim = self.hparams.get("block_ff_dim", self.hparams.get("intermediate_size"))
+        if ff_dim is None:
+            raise KeyError("block_ff_dim")
 
         auto_adjust_ff_dim = self.hparams["block_auto_adjust_ff_dim"]
-        ff_dim = self.hparams["block_ff_dim"]
         ffn_dim_multiplier = self.hparams["block_ffn_dim_multiplier"]
         multiple_of = self.hparams["block_multiple_of"]
 
