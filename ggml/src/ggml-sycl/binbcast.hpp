@@ -36,4 +36,3 @@ void ggml_sycl_repeat(ggml_backend_sycl_context & ctx, ggml_tensor * dst);
 
 
 #endif //GGML_SYCL_BINBCAST_HPP
-

@@ -281,12 +281,6 @@ Use `GGML_CUDA_FORCE_CUBLAS_COMPUTE_16F` environment variable to force use FP16 
 
 The environment variable `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` can be used to enable unified memory in Linux. This allows swapping to system RAM instead of crashing when the GPU VRAM is exhausted. In Windows this setting is available in the NVIDIA control panel as `System Memory Fallback`.
 
-### Peer Access
-
-The environment variable `GGML_CUDA_P2P` can be set to enable peer-to-peer access between multiple GPUs, allowing them to transfer data directly rather than to go through system memory.
-Requires driver support (usually restricted to workstation/datacenter GPUs).
-May cause crashes or corrupted outputs for some motherboards and BIOS settings (e.g. IOMMU).
-
 ### Performance Tuning
 
 The following compilation options are also available to tweak performance:
@@ -395,7 +389,7 @@ You can download it from your Linux distro's package manager or from here: [ROCm
 
 
 The environment variable [`HIP_VISIBLE_DEVICES`](https://rocm.docs.amd.com/en/latest/understand/gpu_isolation.html#hip-visible-devices) can be used to specify which GPU(s) will be used.
-If your GPU is not officially supported you can use the environment variable [`HSA_OVERRIDE_GFX_VERSION`] set to a similar GPU, for example 10.3.0 on RDNA2 (e.g. gfx1030, gfx1031, or gfx1035) or 11.0.0 on RDNA3. Note that [`HSA_OVERRIDE_GFX_VERSION`] is [not supported on Windows](https://github.com/ROCm/ROCm/issues/2654)
+If your GPU is not officially supported you can use the environment variable [`HSA_OVERRIDE_GFX_VERSION`] set to a similar GPU, for example 10.3.0 on RDNA2 (e.g. gfx1030, gfx1031, or gfx1035) or 11.0.0 on RDNA3.
 
 ### Unified Memory
 
@@ -462,8 +456,7 @@ pacman -S git \
     mingw-w64-ucrt-x86_64-gcc \
     mingw-w64-ucrt-x86_64-cmake \
     mingw-w64-ucrt-x86_64-vulkan-devel \
-    mingw-w64-ucrt-x86_64-shaderc \
-    mingw-w64-ucrt-x86_64-spirv-headers
+    mingw-w64-ucrt-x86_64-shaderc
 ```
 
 Switch into the `llama.cpp` directory and build using CMake.
@@ -497,10 +490,8 @@ First, follow the official LunarG instructions for the installation and setup of
 
 On Debian / Ubuntu, you can install the required dependencies using:
 ```sh
-sudo apt-get install libvulkan-dev glslc spirv-headers
+sudo apt-get install libvulkan-dev glslc
 ```
-
-SPIRV-Headers (`spirv/unified1/spirv.hpp`) are required for the Vulkan backend and are **not** always pulled in by the Vulkan loader dev package alone. Other distros use names such as `spirv-headers` (Ubuntu / Debian / Arch), or `spirv-headers-devel` (Fedora / openSUSE). On Windows, the LunarG Vulkan SDK’s `Include` directory already contains these headers.
 
 #### Common steps
 
@@ -750,7 +741,7 @@ cmake --build build --config Release
 
 WebGPU allows cross-platform access to the GPU from supported browsers. We utilize [Emscripten](https://emscripten.org/) to compile ggml's WebGPU backend to WebAssembly. Emscripten does not officially support WebGPU bindings yet, but Dawn currently maintains its own WebGPU bindings called emdawnwebgpu.
 
-Follow the instructions [here](https://dawn.googlesource.com/dawn/+/refs/heads/main/src/emdawnwebgpu/) to download or build the emdawnwebgpu package (Note that it might be safer to build the emdawnwebgpu package locally, so that it stays in sync with the version of Dawn you have installed above). When building using CMake, the path to the emdawnwebgpu port file needs to be set with the flag `EMDAWNWEBGPU_DIR`.
+Follow the instructions [here](https://dawn.googlesource.com/dawn/+/refs/heads/main/src/emdawnwebgpu/) to download or build the emdawnwebgpu package (Note that it might be safer to build the emdawbwebgpu package locally, so that it stays in sync with the version of Dawn you have installed above). When building using CMake, the path to the emdawnwebgpu port file needs to be set with the flag `EMDAWNWEBGPU_DIR`.
 
 ## IBM Z & LinuxONE
 

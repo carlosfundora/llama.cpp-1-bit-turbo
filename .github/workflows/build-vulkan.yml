@@ -72,7 +72,7 @@ jobs:
 
       - name: Setup Vulkan SDK
         if: steps.cache-sdk.outputs.cache-hit != 'true'
-        uses: ./.github/actions/linux-setup-vulkan
+        uses: ./.github/actions/linux-setup-vulkan-llvmpipe
         with:
           path: ./vulkan_sdk
           version: ${{ env.VULKAN_SDK_VERSION }}
@@ -93,5 +93,4 @@ jobs:
           export GGML_VK_DISABLE_F16=1
           export GGML_VK_DISABLE_COOPMAT=1
           # This is using llvmpipe and runs slower than other backends
-          # test-backend-ops is too slow on llvmpipe, skip it
-          ctest -L main -E test-backend-ops --verbose --timeout 900
+          ctest -L main --verbose --timeout 4800

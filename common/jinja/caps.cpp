@@ -1,3 +1,4 @@
+#include "log.h"
 #include "value.h"
 #include "runtime.h"
 #include "caps.h"

@@ -43,8 +43,27 @@ llm_build_llama<embed>::llm_build_llama(const llama_model & model, const llm_gra
             ggml_tensor * rope_factors = model.get_rope_factors(cparams, il);
 
             // compute Q and K and RoPE them
-            auto [Qcur, Kcur, Vcur] = build_qkv(model.layers[il], cur,
-                    n_embd_head, n_head, n_head_kv, il);
+            ggml_tensor * Qcur = build_lora_mm(model.layers[il].wq, cur, model.layers[il].wq_s);
+            cb(Qcur, "Qcur", il);
+            if (model.layers[il].bq) {
+                Qcur = ggml_add(ctx0, Qcur, model.layers[il].bq);
+                cb(Qcur, "Qcur", il);
+            }
+            ggml_tensor * Kcur = build_lora_mm(model.layers[il].wk, cur, model.layers[il].wk_s);
+            cb(Kcur, "Kcur", il);
+            if (model.layers[il].bk) {
+                Kcur = ggml_add(ctx0, Kcur, model.layers[il].bk);
+                cb(Kcur, "Kcur", il);
+            }
+            ggml_tensor * Vcur = build_lora_mm(model.layers[il].wv, cur, model.layers[il].wv_s);
+            cb(Vcur, "Vcur", il);
+            if (model.layers[il].bv) {
+                Vcur = ggml_add(ctx0, Vcur, model.layers[il].bv);
+                cb(Vcur, "Vcur", il);
+            }
+            Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head,    n_tokens);
+            Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
+            Vcur = ggml_reshape_3d(ctx0, Vcur, n_embd_head, n_head_kv, n_tokens);
 
             Qcur = ggml_rope_ext(
                     ctx0, Qcur, inp_pos, rope_factors,
@@ -70,8 +89,11 @@ llm_build_llama<embed>::llm_build_llama(const llama_model & model, const llm_gra
                 cb(Kcur, "Kcur_normed", il);
             }
             cur = build_attn(inp_attn,
-                    model.layers[il].wo, model.layers[il].wo_b, model.layers[il].wo_s,
+                    model.layers[il].wo, model.layers[il].bo,
                     Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, kq_scale, il);
+            if (model.layers[il].wo_s) {
+                cur = ggml_mul(ctx0, cur, model.layers[il].wo_s);
+            }
             cb(cur, "attn_out", il);
         }
         if (il == n_layer - 1 && inp_out_ids) {
@@ -125,6 +147,21 @@ llm_build_llama<embed>::llm_build_llama(const llama_model & model, const llm_gra
 
         cur = build_cvec(cur, il);
         cb(cur, "l_out", il);
+
+        // EAGLE3: save layer output for hidden state extraction
+        if (eagle3 && !eagle3->extract_layer_indices.empty()) {
+            for (size_t ei = 0; ei < eagle3->extract_layer_indices.size(); ei++) {
+                if (eagle3->extract_layer_indices[ei] == il) {
+                    if (eagle3->extract_tensors.size() <= ei) {
+                        eagle3->extract_tensors.resize(ei + 1, nullptr);
+                    }
+                    // Mark as output so backend copies to host after compute
+                    ggml_set_output(cur);
+                    eagle3->extract_tensors[ei] = cur;
+                    break;
+                }
+            }
+        }
 
         // input for next layer
         inpL = cur;

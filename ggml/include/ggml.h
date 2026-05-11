@@ -296,19 +296,19 @@ __host__ __device__ constexpr inline void ggml_unused_vars_impl(Args&&...) noexc
 //    GGML_TENSOR_LOCALS(size_t,  nb1, src1, nb);
 //
 #define GGML_TENSOR_LOCALS_1(type, prefix, pointer, array) \
-    const type prefix##0 = (pointer) ? (pointer)->array[0] : 0; \
+    const type prefix##0 = (pointer) ? (type)((pointer)->array[0]) : 0; \
     GGML_UNUSED(prefix##0);
 #define GGML_TENSOR_LOCALS_2(type, prefix, pointer, array) \
     GGML_TENSOR_LOCALS_1    (type, prefix, pointer, array) \
-    const type prefix##1 = (pointer) ? (pointer)->array[1] : 0; \
+    const type prefix##1 = (pointer) ? (type)((pointer)->array[1]) : 0; \
     GGML_UNUSED(prefix##1);
 #define GGML_TENSOR_LOCALS_3(type, prefix, pointer, array) \
     GGML_TENSOR_LOCALS_2    (type, prefix, pointer, array) \
-    const type prefix##2 = (pointer) ? (pointer)->array[2] : 0; \
+    const type prefix##2 = (pointer) ? (type)((pointer)->array[2]) : 0; \
     GGML_UNUSED(prefix##2);
 #define GGML_TENSOR_LOCALS(type, prefix, pointer, array) \
     GGML_TENSOR_LOCALS_3  (type, prefix, pointer, array) \
-    const type prefix##3 = (pointer) ? (pointer)->array[3] : 0; \
+    const type prefix##3 = (pointer) ? (type)((pointer)->array[3]) : 0; \
     GGML_UNUSED(prefix##3);
 
 #define GGML_TENSOR_UNARY_OP_LOCALS \
@@ -428,8 +428,13 @@ extern "C" {
         // GGML_TYPE_IQ4_NL_8_8 = 38,
         GGML_TYPE_MXFP4   = 39, // MXFP4 (1 block)
         GGML_TYPE_NVFP4   = 40, // NVFP4 (4 blocks, E4M3 scale)
-        GGML_TYPE_Q1_0    = 41,
-        GGML_TYPE_COUNT   = 42,
+        GGML_TYPE_Q1_0    = 42, // PrismML Bonsai 1-bit (32-element blocks)
+        GGML_TYPE_Q1_0_g128 = 43, // PrismML Bonsai 1-bit (128-element blocks, group size 128)
+        GGML_TYPE_PLANAR3_0 = 44, // RotorQuant 3-bit planar (Givens-rotation, 8 centroids, sign-mag split)
+        GGML_TYPE_PLANAR4_0 = 45, // RotorQuant 4-bit planar (Givens-rotation, 16 centroids)
+        GGML_TYPE_ISO3_0    = 46, // RotorQuant 3-bit isometric (Hadamard, 8 centroids, sign-mag split)
+        GGML_TYPE_ISO4_0    = 47, // RotorQuant 4-bit isometric (Hadamard, 16 centroids)
+        GGML_TYPE_COUNT   = 48,
     };
 
     // precision
@@ -467,6 +472,7 @@ extern "C" {
         GGML_FTYPE_MOSTLY_MXFP4   = 25, // except 1d tensors
         GGML_FTYPE_MOSTLY_NVFP4   = 26, // except 1d tensors
         GGML_FTYPE_MOSTLY_Q1_0    = 27, // except 1d tensors
+        GGML_FTYPE_MOSTLY_Q1_0_g128 = 28, // except 1d tensors
     };
 
     // available tensor operations:
@@ -902,17 +908,15 @@ extern "C" {
             struct ggml_tensor  * b,
             struct ggml_tensor  * ids);
 
-    GGML_DEPRECATED(GGML_API struct ggml_tensor * ggml_add1(
+    GGML_API struct ggml_tensor * ggml_add1(
             struct ggml_context * ctx,
             struct ggml_tensor  * a,
-            struct ggml_tensor  * b),
-        "use ggml_add instead");
+            struct ggml_tensor  * b);
 
-    GGML_DEPRECATED(GGML_API struct ggml_tensor * ggml_add1_inplace(
+    GGML_API struct ggml_tensor * ggml_add1_inplace(
             struct ggml_context * ctx,
             struct ggml_tensor  * a,
-            struct ggml_tensor  * b),
-        "use ggml_add_inplace instead");
+            struct ggml_tensor  * b);
 
     // dst = a
     // view(dst, nb1, nb2, nb3, offset) += b
@@ -1773,32 +1777,8 @@ extern "C" {
             int                   n_dims,
             int                   mode);
 
-    // RoPE operations with extended options
-    // a is the input tensor to apply RoPE to, shape [n_embd, n_head, n_token]
-    // b is an int32 vector with size n_token
+    // custom RoPE
     // c is freq factors (e.g. phi3-128k), (optional)
-    // mode can be GGML_ROPE_TYPE_NORMAL or NEOX; for MROPE and VISION mode, use ggml_rope_multi
-    //
-    // pseudo-code for computing theta:
-    //   for i in [0, n_dims/2):
-    //     theta[i] = b[i] * powf(freq_base, -2.0 * i / n_dims);
-    //     theta[i] = theta[i] / c[i];  # if c is provided, divide theta by c
-    //     theta[i] = rope_yarn(theta[i], ...);  # note: theta = theta * freq_scale is applied here
-    //
-    // other params are used by YaRN RoPE scaling, these default values will disable YaRN:
-    //   freq_scale  = 1.0f
-    //   ext_factor  = 0.0f
-    //   attn_factor = 1.0f
-    //   beta_fast   = 0.0f
-    //   beta_slow   = 0.0f
-    //
-    // example:
-    //   (marking: c = cos, s = sin, 0 = unrotated)
-    //   given a single head with size = 8 --> [00000000]
-    //   GGML_ROPE_TYPE_NORMAL  n_dims = 4 --> [cscs0000]
-    //   GGML_ROPE_TYPE_NORMAL  n_dims = 8 --> [cscscscs]
-    //   GGML_ROPE_TYPE_NEOX    n_dims = 4 --> [ccss0000]
-    //   GGML_ROPE_TYPE_NEOX    n_dims = 8 --> [ccccssss]
     GGML_API struct ggml_tensor * ggml_rope_ext(
             struct ggml_context * ctx,
             struct ggml_tensor  * a,
@@ -1814,36 +1794,6 @@ extern "C" {
             float                 beta_fast,
             float                 beta_slow);
 
-    // multi-dimensional RoPE, for Qwen-VL and similar vision models
-    // mode can be either VISION, MROPE, IMROPE, cannot be combined with NORMAL or NEOX
-    // sections specify how many dimensions to rotate in each section:
-    //   section length is equivalent to number of cos/sin pairs, NOT the number of dims
-    //   (i.e. sum of 4 sections are expected to be n_dims/2)
-    //   last sections can be 0, means ignored
-    // all other options are identical to ggml_rope_ext
-    //
-    // important note:
-    //   - NEOX ordering is automatically applied and cannot be disabled for MROPE and VISION
-    //     if you need normal ordering, there are 2 methods:
-    //     (1) split the tensor manually using ggml_view
-    //     (2) permute the weight upon conversion
-    //   - for VISION, n_dims must be head_size/2
-    //
-    // example M-RoPE:
-    //  given sections = [t=4, y=2, x=2, 0]
-    //  given a single head with size = 18 --> [000000000000000000]
-    //  GGML_ROPE_TYPE_MROPE   n_dims = 16 --> [ttttyyxxttttyyxx00] (cos/sin are applied in NEOX ordering)
-    //  GGML_ROPE_TYPE_IMROPE  n_dims = 16 --> [ttyxttyxttyxttyx00] (interleaved M-RoPE, still NEOX ordering)
-    //  note: the theta for each dim is computed the same way as ggml_rope_ext, no matter the section
-    //        in other words, idx used for theta: [0123456789... until n_dims/2], not reset for each section
-    //
-    // example vision RoPE:
-    //  given sections = [y=4, x=4, 0, 0] (last 2 sections are ignored)
-    //  given a single head with size = 8 --> [00000000]
-    //  GGML_ROPE_TYPE_VISION  n_dims = 4 --> [yyyyxxxx]
-    //  other values of n_dims are untested and is undefined behavior
-    //  note: unlike MROPE, the theta for each dim is computed differently for each section
-    //        in other words, idx used for theta: [0123] for y section, then [0123] for x section
     GGML_API struct ggml_tensor * ggml_rope_multi(
             struct ggml_context * ctx,
             struct ggml_tensor  * a,

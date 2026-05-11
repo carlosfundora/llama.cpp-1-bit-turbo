@@ -1,4 +1,4 @@
-ARG ONEAPI_VERSION=2025.3.3-0-devel-ubuntu24.04
+ARG ONEAPI_VERSION=2025.3.2-0-devel-ubuntu24.04
 
 ## Build Image
 
@@ -109,4 +109,3 @@ WORKDIR /app
 HEALTHCHECK CMD [ "curl", "-f", "http://localhost:8080/health" ]
 
 ENTRYPOINT [ "/app/llama-server" ]
-

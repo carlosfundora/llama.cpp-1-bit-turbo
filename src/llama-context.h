@@ -1,7 +1,6 @@
 #pragma once
 
 #include "llama.h"
-#include "llama-ext.h"
 #include "llama-cparams.h"
 #include "llama-graph.h"
 #include "llama-adapter.h"
@@ -22,6 +21,17 @@ class llama_io_write_i;
 // "memory" as in abstract memory for the context
 struct llama_memory_i;
 struct llama_memory_context_i;
+
+// "memory" as in physical memory for a buffer type, in bytes
+struct llama_memory_breakdown_data {
+    size_t model   = 0; // memory allocated for the model
+    size_t context = 0; // memory allocated for the context
+    size_t compute = 0; // memory allocated for temporary compute buffers
+
+    size_t total() const {
+        return model + context + compute;
+    }
+};
 
 struct llama_context {
     // init scheduler and compute buffers, reserve worst-case graphs
@@ -95,6 +105,11 @@ struct llama_context {
     void set_causal_attn(bool value);
     void set_warmup(bool value);
 
+    // EAGLE3 speculative decoding
+    void set_eagle3(const llama_model * model_eagle3);
+    const float * get_eagle3_target_features(int32_t * n_features);
+    void set_eagle3_g_embeddings(const float * data, int32_t n_tokens);
+
     void set_adapters_lora(llama_adapter_lora ** adapters, size_t n_adapters, float * scales);
 
     bool adapters_lora_are_same(llama_adapter_lora ** adapters, size_t n_adapters, float * scales);
@@ -162,7 +177,7 @@ struct llama_context {
     llama_perf_context_data perf_get_data() const;
     void perf_reset();
 
-    llama_memory_breakdown memory_breakdown() const;
+    std::map<ggml_backend_buffer_type_t, llama_memory_breakdown_data> memory_breakdown() const;
 
     //
     // training
@@ -252,6 +267,10 @@ private:
     llama_adapter_loras_ptr loras;
 
     llama_cross cross; // TODO: tmp for handling cross-attention - need something better probably
+
+    // EAGLE3 feature extraction from target model
+    llama_eagle3 eagle3;
+    const llama_model * eagle3_target_model = nullptr; // set when this context is for an EAGLE3 draft model
 
     std::unique_ptr<llama_memory_i> memory;
 

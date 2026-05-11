@@ -38,19 +38,14 @@ export type ToolResultLine = {
 function deriveSingleTurnSections(
 	message: DatabaseMessage,
 	toolMessages: DatabaseMessage[] = [],
-	streamingToolCalls: ApiChatCompletionToolCall[] = [],
-	isStreaming: boolean = false
+	streamingToolCalls: ApiChatCompletionToolCall[] = []
 ): AgenticSection[] {
 	const sections: AgenticSection[] = [];
 
 	// 1. Reasoning content (from dedicated field)
 	if (message.reasoningContent) {
-		const toolCalls = parseToolCalls(message.toolCalls);
-		const hasContentAfterReasoning =
-			!!message.content?.trim() || toolCalls.length > 0 || streamingToolCalls.length > 0;
-		const isPending = isStreaming && !hasContentAfterReasoning;
 		sections.push({
-			type: isPending ? AgenticSectionType.REASONING_PENDING : AgenticSectionType.REASONING,
+			type: AgenticSectionType.REASONING,
 			content: message.reasoningContent
 		});
 	}
@@ -109,13 +104,12 @@ function deriveSingleTurnSections(
 export function deriveAgenticSections(
 	message: DatabaseMessage,
 	toolMessages: DatabaseMessage[] = [],
-	streamingToolCalls: ApiChatCompletionToolCall[] = [],
-	isStreaming: boolean = false
+	streamingToolCalls: ApiChatCompletionToolCall[] = []
 ): AgenticSection[] {
 	const hasAssistantContinuations = toolMessages.some((m) => m.role === MessageRole.ASSISTANT);
 
 	if (!hasAssistantContinuations) {
-		return deriveSingleTurnSections(message, toolMessages, streamingToolCalls, isStreaming);
+		return deriveSingleTurnSections(message, toolMessages, streamingToolCalls);
 	}
 
 	const sections: AgenticSection[] = [];
@@ -133,12 +127,7 @@ export function deriveAgenticSections(
 			const isLastTurn = i + 1 + turnToolMsgs.length >= toolMessages.length;
 
 			sections.push(
-				...deriveSingleTurnSections(
-					msg,
-					turnToolMsgs,
-					isLastTurn ? streamingToolCalls : [],
-					isLastTurn && isStreaming
-				)
+				...deriveSingleTurnSections(msg, turnToolMsgs, isLastTurn ? streamingToolCalls : [])
 			);
 
 			i += 1 + turnToolMsgs.length;

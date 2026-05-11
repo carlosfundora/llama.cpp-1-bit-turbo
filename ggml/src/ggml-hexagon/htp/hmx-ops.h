@@ -7,11 +7,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "htp-ops.h"
+#ifndef restrict
+#  define restrict __restrict
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct htp_context;  // forward declaration
 
 typedef struct {
     float        *dst;

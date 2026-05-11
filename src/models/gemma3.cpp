@@ -47,8 +47,18 @@ llm_build_gemma3<iswa>::llm_build_gemma3(const llama_model & model, const llm_gr
         // self-attention
         {
             // compute Q and K and RoPE them
-            auto [Qcur, Kcur, Vcur] = build_qkv(model.layers[il], cur,
-                    n_embd_head, n_head, n_head_kv, il);
+            ggml_tensor * Qcur = build_lora_mm(model.layers[il].wq, cur);
+            cb(Qcur, "Qcur", il);
+
+            ggml_tensor * Kcur = build_lora_mm(model.layers[il].wk, cur);
+            cb(Kcur, "Kcur", il);
+
+            ggml_tensor * Vcur = build_lora_mm(model.layers[il].wv, cur);
+            cb(Vcur, "Vcur", il);
+
+            Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head,    n_tokens);
+            Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
+            Vcur = ggml_reshape_3d(ctx0, Vcur, n_embd_head, n_head_kv, n_tokens);
 
             Qcur = build_norm(Qcur, model.layers[il].attn_q_norm, NULL, LLM_NORM_RMS, il);
             cb(Qcur, "Qcur_normed", il);
@@ -74,7 +84,7 @@ llm_build_gemma3<iswa>::llm_build_gemma3(const llama_model & model, const llm_gr
             Qcur = ggml_scale(ctx0, Qcur, hparams.f_attention_scale);
 
             cur = build_attn(inp_attn,
-                    model.layers[il].wo, NULL, model.layers[il].wo_s,
+                    model.layers[il].wo, NULL,
                     Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, 1.0f, il);
         }
         if (il == n_layer - 1 && inp_out_ids) {

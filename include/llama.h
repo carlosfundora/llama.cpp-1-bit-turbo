@@ -155,6 +155,7 @@ extern "C" {
         LLAMA_FTYPE_MOSTLY_MXFP4_MOE     = 38, // except 1d tensors
         LLAMA_FTYPE_MOSTLY_NVFP4         = 39, // except 1d tensors
         LLAMA_FTYPE_MOSTLY_Q1_0          = 40, // except 1d tensors
+        LLAMA_FTYPE_MOSTLY_Q1_0_g128     = 41, // except 1d tensors
 
         LLAMA_FTYPE_GUESSED = 1024, // not specified in the model file
     };
@@ -192,10 +193,9 @@ extern "C" {
     LLAMA_API const char * llama_flash_attn_type_name(enum llama_flash_attn_type flash_attn_type);
 
     enum llama_split_mode {
-        LLAMA_SPLIT_MODE_NONE   = 0, // single GPU
-        LLAMA_SPLIT_MODE_LAYER  = 1, // split layers and KV across GPUs
-        LLAMA_SPLIT_MODE_ROW    = 2, // split layers and KV across GPUs, use tensor parallelism if supported
-        LLAMA_SPLIT_MODE_TENSOR = 3,
+        LLAMA_SPLIT_MODE_NONE  = 0, // single GPU
+        LLAMA_SPLIT_MODE_LAYER = 1, // split layers and KV across GPUs
+        LLAMA_SPLIT_MODE_ROW   = 2, // split layers and KV across GPUs, use tensor parallelism if supported
     };
 
     // TODO: simplify (https://github.com/ggml-org/llama.cpp/pull/9294#pullrequestreview-2286561979)
@@ -510,6 +510,27 @@ extern "C" {
 
     // Frees all allocated memory
     LLAMA_API void llama_free(struct llama_context * ctx);
+
+    enum llama_params_fit_status {
+        LLAMA_PARAMS_FIT_STATUS_SUCCESS = 0, // found allocations that are projected to fit
+        LLAMA_PARAMS_FIT_STATUS_FAILURE = 1, // could not find allocations that are projected to fit
+        LLAMA_PARAMS_FIT_STATUS_ERROR   = 2, // a hard error occurred, e.g. because no model could be found at the specified path
+    };
+
+    // fits mparams and cparams to free device memory (assumes system memory is unlimited)
+    //   - returns true if the parameters could be successfully modified to fit device memory
+    //   - this function is NOT thread safe because it modifies the global llama logger state
+    //   - only parameters that have the same value as in llama_default_model_params are modified
+    //     with the exception of the context size which is modified if and only if equal to 0
+    LLAMA_API enum llama_params_fit_status llama_params_fit(
+                                   const char   * path_model,
+                    struct llama_model_params   * mparams,
+                    struct llama_context_params * cparams,
+                                          float * tensor_split,          // writable buffer for tensor split, needs at least llama_max_devices elements
+        struct llama_model_tensor_buft_override * tensor_buft_overrides, // writable buffer for overrides, needs at least llama_max_tensor_buft_overrides elements
+                                         size_t * margins,               // margins of memory to leave per device in bytes
+                                       uint32_t   n_ctx_min,             // minimum context size to set when trying to reduce memory use
+                            enum ggml_log_level   log_level);            // minimum log level to print during fitting, lower levels go to debug log
 
     LLAMA_API int64_t llama_time_us(void);
 
@@ -1006,6 +1027,42 @@ extern "C" {
     // when pooling_type == LLAMA_POOLING_TYPE_RANK, returns float[n_cls_out] with the rank(s) of the sequence
     // otherwise: float[n_embd] (1-dimensional)
     LLAMA_API float * llama_get_embeddings_seq(struct llama_context * ctx, llama_seq_id seq_id);
+
+    //
+    // EAGLE3 speculative decoding API [EXPERIMENTAL]
+    //
+
+    // Configure target context for EAGLE3 feature extraction.
+    // After calling this, forward passes through ctx_tgt will extract hidden states
+    // at the layers specified by the EAGLE3 model's aux_layers config.
+    LLAMA_API void llama_set_eagle3(
+            struct llama_context * ctx_tgt,
+       const struct llama_model  * model_eagle3);
+
+    // Get extracted target features after a target model forward pass.
+    // Returns pointer to concatenated hidden states [n_aux_layers * n_embd * n_tokens].
+    // The pointer is valid until the next call to llama_decode() on ctx_tgt.
+    LLAMA_API const float * llama_get_eagle3_target_features(
+            struct llama_context * ctx_tgt,
+                         int32_t * n_features);  // output: total float count
+
+    // Set g_embeddings for an EAGLE3 decoder context before decode.
+    // data points to [n_embd * n_tokens] floats from the encoder output.
+    LLAMA_API void llama_set_eagle3_g_embeddings(
+            struct llama_context * ctx_eagle3,
+                     const float * data,
+                         int32_t   n_tokens);
+
+    // Get the number of auxiliary layers used by an EAGLE3 model for feature extraction.
+    LLAMA_API int32_t llama_model_eagle3_n_aux_layers(const struct llama_model * model);
+
+    // Copy the EAGLE3 fc.weight tensor to a host F32 buffer.
+    // buf must point to n_embd * fc_input_size floats.
+    // Returns fc_input_size (= n_aux_layers * target_n_embd), or 0 on error.
+    LLAMA_API int64_t llama_model_eagle3_get_fc_weight(
+            const struct llama_model * model,
+                               float * buf,
+                             int64_t   buf_size);
 
     //
     // backend sampling API [EXPERIMENTAL]
@@ -1524,6 +1581,9 @@ extern "C" {
     LLAMA_API struct llama_perf_sampler_data llama_perf_sampler      (const struct llama_sampler * chain);
     LLAMA_API void                           llama_perf_sampler_print(const struct llama_sampler * chain);
     LLAMA_API void                           llama_perf_sampler_reset(      struct llama_sampler * chain);
+
+    // print a breakdown of per-device memory use via LLAMA_LOG:
+    LLAMA_API void llama_memory_breakdown_print(const struct llama_context * ctx);
 
     //
     // training

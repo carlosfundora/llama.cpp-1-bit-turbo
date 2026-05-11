@@ -138,7 +138,33 @@ void quantize_row_q8_K(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, in
 //===================================== Dot products =================================
 
 void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
-    const int qk = QK1_0;  // 128
+    // For nrc > 1, call generic multiple times
+    if (nrc == 1) {
+        ggml_vec_dot_q1_0_q8_0_generic(n, s, bs, vx, bx, vy, by, nrc);
+    } else {
+        // Handle multiple rows by calling generic for each
+        const int qk = QK8_0;
+        const int nb = n / qk;
+        const size_t x_size = nb * sizeof(block_q1_0);
+        const size_t y_size = nb * sizeof(block_q8_0);
+
+        for (int i = 0; i < nrc; i++) {
+            ggml_vec_dot_q1_0_q8_0_generic(
+                n,
+                s + i,
+                bs,
+                (const char *)vx + i * x_size,
+                bx,
+                (const char *)vy + i * y_size,
+                by,
+                1
+            );
+        }
+    }
+}
+
+void ggml_vec_dot_q1_0_g128_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
+    const int qk = QK1_0_g128;  // 128
     const int nb = n / qk;
 
     assert(n % qk == 0);
@@ -148,10 +174,23 @@ void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
     UNUSED(by);
     UNUSED(bs);
 
-    const block_q1_0 * GGML_RESTRICT x = vx;
+    const block_q1_0_g128 * GGML_RESTRICT x = vx;
     const block_q8_0 * GGML_RESTRICT y = vy;
 
+    float sumf = 0.0f;
+
 #if defined(__ARM_NEON)
+    // Process one Q1_0_g128 block at a time
+    // Each block has 128 1-bit values and needs 4 Q8_0 blocks (4 * 32 = 128)
+    //
+    // Strategy: For 1-bit quants, bit=1 means +1, bit=0 means -1
+    // dot_product = sum(xi * yi) where xi is +1 or -1
+    //             = sum_where_bit_1(yi) - sum_where_bit_0(yi)
+    //             = 2 * sum_where_bit_1(yi) - sum_all(yi)
+    //
+    // We use the lookup table approach: expand each byte of bits to 8 bytes
+    // where each byte is either 0x00 (bit=0) or 0x10 (bit=1), then use as mask
+
     float32x4_t sumv = vdupq_n_f32(0.0f);
 
     for (int i = 0; i < nb; i++) {
@@ -210,13 +249,31 @@ void ggml_vec_dot_q1_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const voi
         }
     }
 
-    *s = vaddvq_f32(sumv);
+    sumf = vaddvq_f32(sumv);
 #else
-    UNUSED(nb);
-    UNUSED(x);
-    UNUSED(y);
-    ggml_vec_dot_q1_0_q8_0_generic(n, s, bs, vx, bx, vy, by, nrc);
+    // Scalar fallback
+    for (int i = 0; i < nb; i++) {
+        const float d0 = GGML_FP16_TO_FP32(x[i].d);
+
+        // Process 4 Q8_0 blocks
+        for (int k = 0; k < 4; k++) {
+            const float d1 = GGML_FP16_TO_FP32(y[i*4 + k].d);
+
+            int sumi = 0;
+            for (int j = 0; j < QK8_0; j++) {
+                const int bit_index = k * QK8_0 + j;
+                const int byte_index = bit_index / 8;
+                const int bit_offset = bit_index % 8;
+
+                const int xi = ((x[i].qs[byte_index] >> bit_offset) & 1) ? 1 : -1;
+                sumi += xi * y[i*4 + k].qs[j];
+            }
+            sumf += d0 * d1 * sumi;
+        }
+    }
 #endif
+
+    *s = sumf;
 }
 
 
@@ -763,7 +820,6 @@ void ggml_vec_dot_nvfp4_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const vo
         const int8x16_t q4_lo_1 = ggml_vqtbl1q_s8(values, vandq_u8  (q4bits_1, m4b));
         const int8x16_t q4_hi_1 = ggml_vqtbl1q_s8(values, vshrq_n_u8(q4bits_1, 4));
 
-#if defined(__ARM_FEATURE_DOTPROD)
         const int8x16_t q8_0a = vld1q_s8(y[2*ib].qs);
         const int8x16_t q8_0b = vld1q_s8(y[2*ib].qs + 16);
         const int8x16_t q8_lo_0 = vcombine_s8(vget_low_s8(q8_0a), vget_low_s8(q8_0b));
@@ -775,40 +831,15 @@ void ggml_vec_dot_nvfp4_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const vo
         const int8x16_t q8_hi_1 = vcombine_s8(vget_high_s8(q8_1a), vget_high_s8(q8_1b));
 
         const int32x4_t p0 = vaddq_s32(
-            vdotq_s32(vdupq_n_s32(0), q4_lo_0, q8_lo_0),
-            vdotq_s32(vdupq_n_s32(0), q4_hi_0, q8_hi_0));
+            ggml_vdotq_s32(vdupq_n_s32(0), q4_lo_0, q8_lo_0),
+            ggml_vdotq_s32(vdupq_n_s32(0), q4_hi_0, q8_hi_0));
         const int32x4_t p1 = vaddq_s32(
-            vdotq_s32(vdupq_n_s32(0), q4_lo_1, q8_lo_1),
-            vdotq_s32(vdupq_n_s32(0), q4_hi_1, q8_hi_1));
+            ggml_vdotq_s32(vdupq_n_s32(0), q4_lo_1, q8_lo_1),
+            ggml_vdotq_s32(vdupq_n_s32(0), q4_hi_1, q8_hi_1));
 
-        const int32x4_t sumi = vpaddq_s32(p0, p1);
-#else
-        const int8x8_t q4_0_lo = vget_low_s8(q4_lo_0);
-        const int8x8_t q4_0_hi = vget_low_s8(q4_hi_0);
-        const int8x8_t q4_1_lo = vget_high_s8(q4_lo_0);
-        const int8x8_t q4_1_hi = vget_high_s8(q4_hi_0);
-        const int8x8_t q4_2_lo = vget_low_s8(q4_lo_1);
-        const int8x8_t q4_2_hi = vget_low_s8(q4_hi_1);
-        const int8x8_t q4_3_lo = vget_high_s8(q4_lo_1);
-        const int8x8_t q4_3_hi = vget_high_s8(q4_hi_1);
+        const int32x4_t sums = vpaddq_s32(p0, p1);
 
-        const int8x8_t q8_0_lo = vld1_s8(y[2*ib].qs);
-        const int8x8_t q8_0_hi = vld1_s8(y[2*ib].qs + 8);
-        const int8x8_t q8_1_lo = vld1_s8(y[2*ib].qs + 16);
-        const int8x8_t q8_1_hi = vld1_s8(y[2*ib].qs + 24);
-        const int8x8_t q8_2_lo = vld1_s8(y[2*ib+1].qs);
-        const int8x8_t q8_2_hi = vld1_s8(y[2*ib+1].qs + 8);
-        const int8x8_t q8_3_lo = vld1_s8(y[2*ib+1].qs + 16);
-        const int8x8_t q8_3_hi = vld1_s8(y[2*ib+1].qs + 24);
-
-        const int32x4_t sumi = (int32x4_t){
-            vaddvq_s32(ggml_nvfp4_dot8(q4_0_lo, q8_0_lo, q4_0_hi, q8_0_hi)),
-            vaddvq_s32(ggml_nvfp4_dot8(q4_1_lo, q8_1_lo, q4_1_hi, q8_1_hi)),
-            vaddvq_s32(ggml_nvfp4_dot8(q4_2_lo, q8_2_lo, q4_2_hi, q8_2_hi)),
-            vaddvq_s32(ggml_nvfp4_dot8(q4_3_lo, q8_3_lo, q4_3_hi, q8_3_hi)),
-        };
-#endif
-
+        // Decode 4 UE4M3 scales to f32 and multiply with q8 scales
         const float dy0 = GGML_CPU_FP16_TO_FP32(y[2*ib].d);
         const float dy1 = GGML_CPU_FP16_TO_FP32(y[2*ib+1].d);
         const float32x4_t nvsc = {
@@ -819,7 +850,7 @@ void ggml_vec_dot_nvfp4_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const vo
         };
         const float32x4_t scales = vmulq_f32(nvsc, (float32x4_t){dy0, dy0, dy1, dy1});
 
-        acc = vfmaq_f32(acc, vcvtq_f32_s32(sumi), scales);
+        acc = vfmaq_f32(acc, vcvtq_f32_s32(sums), scales);
     }
     sumf = vaddvq_f32(acc);
 #else
@@ -4242,4 +4273,3 @@ void ggml_vec_dot_iq4_xs_q8_K(int n, float * GGML_RESTRICT s, size_t bs, const v
     ggml_vec_dot_iq4_xs_q8_K_generic(n, s, bs, vx, bx, vy, by, nrc);
 #endif
 }
-

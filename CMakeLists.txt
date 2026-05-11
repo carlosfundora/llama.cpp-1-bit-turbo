@@ -182,6 +182,9 @@ endif()
 if (NOT TARGET ggml AND NOT LLAMA_USE_SYSTEM_GGML)
     set(GGML_BUILD_NUMBER ${LLAMA_BUILD_NUMBER})
     set(GGML_BUILD_COMMIT ${LLAMA_BUILD_COMMIT})
+    # Optional Triton AOT path — must be included before ggml so the
+    # GGML_TRITON compile definitions are visible inside ggml/src.
+    include(cmake/triton-aot.cmake)
     add_subdirectory(ggml)
     # ... otherwise assume ggml is added by a parent CMakeLists.txt
 endif()
@@ -225,7 +228,7 @@ foreach(FILE_PATH ${EXTRA_LICENSES})
 endforeach()
 
 if (LLAMA_BUILD_COMMON)
-    license_generate(llama-common)
+    license_generate(common)
 endif()
 
 #
@@ -248,10 +251,6 @@ set_target_properties(llama
         PUBLIC_HEADER "${LLAMA_PUBLIC_HEADERS}")
 
 install(TARGETS llama LIBRARY PUBLIC_HEADER)
-
-if (LLAMA_BUILD_COMMON)
-    install(TARGETS llama-common LIBRARY)
-endif()
 
 configure_package_config_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/cmake/llama-config.cmake.in

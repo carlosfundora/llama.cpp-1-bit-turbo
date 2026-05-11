@@ -1,6 +1,5 @@
 #include "arg.h"
 
-#include "build-info.h"
 #include "chat.h"
 #include "common.h"
 #include "download.h"
@@ -292,16 +291,14 @@ static bool common_params_handle_remote_preset(common_params & params, llama_exa
         hf_tag = "default";
     }
 
-    std::string model_endpoint = common_get_model_endpoint();
+    const bool offline = params.offline;
+    std::string model_endpoint = get_model_endpoint();
     auto preset_url = model_endpoint + hf_repo + "/resolve/main/preset.ini";
 
     // prepare local path for caching
     auto preset_fname = clean_file_name(hf_repo + "_preset.ini");
     auto preset_path = fs_get_cache_file(preset_fname);
-    common_download_opts opts;
-    opts.bearer_token = params.hf_token;
-    opts.offline = params.offline;
-    const int status = common_download_file_single(preset_url, preset_path, opts);
+    const int status = common_download_file_single(preset_url, preset_path, params.hf_token, offline);
     const bool has_preset = status >= 200 && status < 400;
 
     // remote preset is optional, so we don't error out if not found
@@ -344,10 +341,10 @@ static handle_model_result common_params_handle_model(struct common_params_model
             model.hf_file = model.path;
             model.path = "";
         }
-        common_download_opts opts;
-        opts.bearer_token = bearer_token;
+        common_download_model_opts opts;
+        opts.download_mmproj = true;
         opts.offline = offline;
-        auto download_result = common_download_model(model, opts, true);
+        auto download_result = common_download_model(model, bearer_token, opts);
 
         if (download_result.model_path.empty()) {
             LOG_ERR("error: failed to download model from Hugging Face\n");
@@ -368,10 +365,9 @@ static handle_model_result common_params_handle_model(struct common_params_model
             model.path = fs_get_cache_file(string_split<std::string>(f, '/').back());
         }
 
-        common_download_opts opts;
-        opts.bearer_token = bearer_token;
+        common_download_model_opts opts;
         opts.offline = offline;
-        auto download_result = common_download_model(model, opts);
+        auto download_result = common_download_model(model, bearer_token, opts);
         if (download_result.model_path.empty()) {
             LOG_ERR("error: failed to download model from %s\n", model.url.c_str());
             exit(1);
@@ -391,9 +387,21 @@ const std::vector<ggml_type> kv_cache_types = {
     GGML_TYPE_IQ4_NL,
     GGML_TYPE_Q5_0,
     GGML_TYPE_Q5_1,
+    GGML_TYPE_PLANAR3_0,
+    GGML_TYPE_PLANAR4_0,
+    GGML_TYPE_ISO3_0,
+    GGML_TYPE_ISO4_0,
 };
 
 static ggml_type kv_cache_type_from_str(const std::string & s) {
+    // RotorQuant shorthand aliases (cross-engine compatible with SGLang)
+    if (s == "rq3")        return GGML_TYPE_PLANAR3_0;
+    if (s == "rq4")        return GGML_TYPE_PLANAR4_0;
+    if (s == "rq3_planar") return GGML_TYPE_PLANAR3_0;
+    if (s == "rq4_planar") return GGML_TYPE_PLANAR4_0;
+    if (s == "rq3_iso")    return GGML_TYPE_ISO3_0;
+    if (s == "rq4_iso")    return GGML_TYPE_ISO4_0;
+
     for (const auto & type : kv_cache_types) {
         if (ggml_type_name(type) == s) {
             return type;
@@ -1045,8 +1053,8 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         {"--version"},
         "show version and build info",
         [](common_params &) {
-            fprintf(stderr, "version: %d (%s)\n", llama_build_number(), llama_commit());
-            fprintf(stderr, "built with %s for %s\n", llama_compiler(), llama_build_target());
+            fprintf(stderr, "version: %d (%s)\n", LLAMA_BUILD_NUMBER, LLAMA_COMMIT);
+            fprintf(stderr, "built with %s for %s\n", LLAMA_COMPILER, LLAMA_BUILD_TARGET);
             exit(0);
         }
     ));
@@ -1315,14 +1323,6 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.kv_unified = value;
         }
     ).set_env("LLAMA_ARG_KV_UNIFIED").set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_PERPLEXITY, LLAMA_EXAMPLE_BATCHED, LLAMA_EXAMPLE_BENCH, LLAMA_EXAMPLE_PARALLEL}));
-    add_opt(common_arg(
-        {"--cache-idle-slots"},
-        {"--no-cache-idle-slots"},
-        "save and clear idle slots on new task (default: enabled, requires unified KV and cache-ram)",
-        [](common_params & params, bool value) {
-            params.cache_idle_slots = value;
-        }
-    ).set_env("LLAMA_ARG_CACHE_IDLE_SLOTS").set_examples({LLAMA_EXAMPLE_SERVER}));
     add_opt(common_arg(
         {"--context-shift"},
         {"--no-context-shift"},
@@ -2352,21 +2352,19 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_env("LLAMA_ARG_N_GPU_LAYERS"));
     add_opt(common_arg(
-        {"-sm", "--split-mode"}, "{none,layer,row,tensor}",
+        {"-sm", "--split-mode"}, "{none,layer,row}",
         "how to split the model across multiple GPUs, one of:\n"
         "- none: use one GPU only\n"
-        "- layer (default): split layers and KV across GPUs (pipelined)\n"
-        "- row: split weight across GPUs by rows (parallelized)\n"
-        "- tensor: split weights and KV across GPUs (parallelized, EXPERIMENTAL)",
+        "- layer (default): split layers and KV across GPUs\n"
+        "- row: split rows across GPUs",
         [](common_params & params, const std::string & value) {
-            if (value == "none") {
+            std::string arg_next = value;
+            if (arg_next == "none") {
                 params.split_mode = LLAMA_SPLIT_MODE_NONE;
-            } else if (value == "layer") {
+            } else if (arg_next == "layer") {
                 params.split_mode = LLAMA_SPLIT_MODE_LAYER;
-            } else if (value == "row") {
+            } else if (arg_next == "row") {
                 params.split_mode = LLAMA_SPLIT_MODE_ROW;
-            } else if (value == "tensor") {
-                params.split_mode = LLAMA_SPLIT_MODE_TENSOR;
             } else {
                 throw std::invalid_argument("invalid value");
             }
@@ -2426,20 +2424,6 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             }
         }
     ).set_env("LLAMA_ARG_FIT"));
-    add_opt(common_arg(
-        { "-fitp", "--fit-print" }, "[on|off]",
-        string_format("print the estimated required memory ('on' or 'off', default: '%s')", params.fit_params_print ? "on" : "off"),
-        [](common_params & params, const std::string & value) {
-            if (is_truthy(value)) {
-                params.fit_params_print = true;
-            } else if (is_falsey(value)) {
-                params.fit_params_print = false;
-            } else {
-                throw std::runtime_error(
-                    string_format("error: unknown value for --fit-print: '%s'\n", value.c_str()));
-            }
-        }
-    ).set_examples({LLAMA_EXAMPLE_FIT_PARAMS}).set_env("LLAMA_ARG_FIT_ESTIMATE"));
     add_opt(common_arg(
         { "-fitt", "--fit-target" }, "MiB0,MiB1,MiB2,...",
         string_format("target margin per device for --fit, comma-separated list of values, "
@@ -3122,14 +3106,14 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         "token budget for thinking: -1 for unrestricted, 0 for immediate end, N>0 for token budget (default: -1)",
         [](common_params & params, int value) {
             if (value < -1) { throw std::invalid_argument("invalid value"); }
-            params.sampling.reasoning_budget_tokens = value;
+            params.reasoning_budget = value;
         }
     ).set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI}).set_env("LLAMA_ARG_THINK_BUDGET"));
     add_opt(common_arg(
         {"--reasoning-budget-message"}, "MESSAGE",
         "message injected before the end-of-thinking tag when reasoning budget is exhausted (default: none)",
         [](common_params & params, const std::string & value) {
-            params.sampling.reasoning_budget_message = value;
+            params.reasoning_budget_message = value;
         }
     ).set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI}).set_env("LLAMA_ARG_THINK_BUDGET_MESSAGE"));
     add_opt(common_arg(
@@ -3517,7 +3501,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_examples({LLAMA_EXAMPLE_SPECULATIVE, LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_CLI}));
     add_opt(common_arg(
-        {"--spec-type"}, "[none|ngram-cache|ngram-simple|ngram-map-k|ngram-map-k4v|ngram-mod]",
+        {"--spec-type"}, "[none|ngram-cache|ngram-simple|ngram-map-k|ngram-map-k4v|ngram-mod|phantom]",
         string_format("type of speculative decoding to use when no draft model is provided (default: %s)\n",
             common_speculative_type_to_str(params.speculative.type).c_str()),
         [](common_params & params, const std::string & value) {
@@ -3533,6 +3517,8 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
                 params.speculative.type = COMMON_SPECULATIVE_TYPE_NGRAM_MAP_K4V;
             } else if (value == "ngram-mod") {
                 params.speculative.type = COMMON_SPECULATIVE_TYPE_NGRAM_MOD;
+            } else if (value == "phantom") {
+                params.speculative.type = COMMON_SPECULATIVE_TYPE_PHANTOM;
             } else {
                 throw std::invalid_argument("unknown speculative decoding type without draft model");
             }
@@ -3568,6 +3554,26 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.speculative.ngram_min_hits = value;
         }
     ).set_examples({LLAMA_EXAMPLE_SERVER}));
+    add_opt(common_arg(
+        {"--phantom-buffers"}, "N",
+        string_format("ghost buffer ring slots for phantom speculative decoding, 0 = disabled (default: %d)", params.speculative.phantom_buffers),
+        [](common_params & params, int value) {
+            if (value < 0 || value > 8) {
+                throw std::invalid_argument("phantom buffers must be 0-8");
+            }
+            params.speculative.phantom_buffers = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_PHANTOM_BUFFERS"));
+    add_opt(common_arg(
+        {"--phantom-bloom-bits"}, "N",
+        string_format("bloom filter size in bits for phantom speculative decoding (default: %d)", params.speculative.phantom_bloom_bits),
+        [](common_params & params, int value) {
+            if (value < 256 || value > 1048576) {
+                throw std::invalid_argument("phantom bloom bits must be 256-1048576");
+            }
+            params.speculative.phantom_bloom_bits = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_PHANTOM_BLOOM_BITS"));
     add_opt(common_arg(
         {"-ctkd", "--cache-type-k-draft"}, "TYPE",
         string_format(
@@ -3899,17 +3905,6 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.port = 8014;
             params.n_ctx = 0;
             params.use_jinja = true;
-        }
-    ).set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_CLI}));
-
-    add_opt(common_arg(
-        {"--spec-default"},
-        string_format("enable default speculative decoding config"),
-        [](common_params & params) {
-            params.speculative.type = COMMON_SPECULATIVE_TYPE_NGRAM_MOD;
-            params.speculative.ngram_size_n = 24;
-            params.speculative.n_min = 48;
-            params.speculative.n_max = 64;
         }
     ).set_examples({LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_CLI}));
 

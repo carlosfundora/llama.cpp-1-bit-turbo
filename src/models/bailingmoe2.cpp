@@ -3,6 +3,7 @@
 llm_build_bailingmoe2::llm_build_bailingmoe2(const llama_model & model, const llm_graph_params & params) :
     llm_graph_context(params) {
     const int64_t n_embd_head = hparams.n_embd_head_v();
+    const int64_t n_embd_gqa  = hparams.n_embd_v_gqa();
 
     GGML_ASSERT(n_embd_head == hparams.n_embd_head_k());
 
@@ -28,8 +29,15 @@ llm_build_bailingmoe2::llm_build_bailingmoe2(const llama_model & model, const ll
 
         // self_attention
         {
-            auto [Qcur, Kcur, Vcur] = build_qkv(model.layers[il], cur,
-                    n_embd_head, n_head, n_head_kv, il);
+            cur = build_lora_mm(model.layers[il].wqkv, cur);
+            cb(cur, "wqkv", il);
+
+            ggml_tensor * Qcur = ggml_view_3d(ctx0, cur, n_embd_head, n_head, n_tokens, n_embd_head * sizeof(float),
+                                              cur->nb[1], 0 * sizeof(float) * (n_embd));
+            ggml_tensor * Kcur = ggml_view_3d(ctx0, cur, n_embd_head, n_head_kv, n_tokens, n_embd_head * sizeof(float),
+                                              cur->nb[1], 1 * sizeof(float) * (n_embd));
+            ggml_tensor * Vcur = ggml_view_3d(ctx0, cur, n_embd_head, n_head_kv, n_tokens, n_embd_head * sizeof(float),
+                                              cur->nb[1], 1 * sizeof(float) * (n_embd + n_embd_gqa));
 
             Qcur = build_norm(Qcur, model.layers[il].attn_q_norm, NULL, LLM_NORM_RMS, il);
             cb(Qcur, "Qcur_normed", il);
@@ -48,7 +56,7 @@ llm_build_bailingmoe2::llm_build_bailingmoe2(const llama_model & model, const ll
             cb(Vcur, "Vcur", il);
 
             cur = build_attn(inp_attn,
-                    model.layers[il].wo, model.layers[il].wo_b, model.layers[il].wo_s,
+                    model.layers[il].wo, model.layers[il].bo,
                     Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, 1.0f / sqrtf(float(n_embd_head)), il);
         }
 

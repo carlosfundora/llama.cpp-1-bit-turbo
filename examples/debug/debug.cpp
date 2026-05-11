@@ -9,7 +9,6 @@
 #include <vector>
 #include <filesystem>
 #include <fstream>
-#include <optional>
 #include <regex>
 
 static void print_usage(int /*argc*/, char ** argv) {
@@ -202,14 +201,10 @@ static bool run(llama_context * ctx, const common_params & params) {
     print_tokenized_prompt(ctx, tokens, params.prompt);
 
     if (params.save_logits) {
-        try {
-            output_data output {ctx, model, params};
-            std::filesystem::path model_path{params.model.path};
-            std::string model_name{model_path.stem().string()};
-            save_output_data(output, model_name, params.logits_output_dir);
-        } catch (const std::exception & e) {
-            LOG_ERR("%s : error saving logits: %s\n", __func__, e.what());
-        }
+        output_data output {ctx, model, params};
+        std::filesystem::path model_path{params.model.path};
+        std::string model_name{model_path.stem().string()};
+        save_output_data(output, model_name, params.logits_output_dir);
     }
 
     return true;
@@ -227,10 +222,7 @@ int main(int argc, char ** argv) {
     llama_backend_init();
     llama_numa_init(params.numa);
 
-    std::optional<common_debug_cb_user_data> cb_data;
-    if (!params.save_logits) {
-        cb_data.emplace(params, params.tensor_filter);
-    }
+    base_callback_data cb_data(params, params.tensor_filter);
 
     auto llama_init = common_init_from_params(params);
 

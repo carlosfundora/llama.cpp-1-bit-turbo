@@ -110,6 +110,15 @@ def test_with_ctx_shift():
     assert res.body["truncated"] == True
 
 
+def test_quantized_v_cache_requires_flash_attention():
+    global server
+    server.ctv = "q4_0"
+    server.fa = "off"
+
+    with pytest.raises(RuntimeError, match="Server process died"):
+        server.start(timeout_seconds=15)
+
+
 @pytest.mark.parametrize("n_slots,n_requests", [
     (1, 2),
     (2, 2),

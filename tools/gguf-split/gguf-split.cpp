@@ -1,10 +1,7 @@
-#include "llama.h"
-
-#include "build-info.h"
-#include "common.h"
-
 #include "ggml.h"
 #include "gguf.h"
+#include "llama.h"
+#include "common.h"
 
 #include <algorithm>
 #include <cinttypes>
@@ -104,8 +101,8 @@ static void split_params_parse_ex(int argc, const char ** argv, split_params & p
             split_print_usage(argv[0]);
             exit(0);
         } else if (arg == "--version") {
-            fprintf(stderr, "version: %d (%s)\n", llama_build_number(), llama_commit());
-            fprintf(stderr, "built with %s for %s\n", llama_compiler(), llama_build_target());
+            fprintf(stderr, "version: %d (%s)\n", LLAMA_BUILD_NUMBER, LLAMA_COMMIT);
+            fprintf(stderr, "built with %s for %s\n", LLAMA_COMPILER, LLAMA_BUILD_TARGET);
             exit(0);
         } else if (arg == "--dry-run") {
             arg_found = true;

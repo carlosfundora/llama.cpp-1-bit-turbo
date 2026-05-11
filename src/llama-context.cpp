@@ -1,6 +1,5 @@
 #include "llama-context.h"
 
-#include "ggml.h"
 #include "llama-arch.h"
 #include "llama-impl.h"
 #include "llama-batch.h"
@@ -9,7 +8,6 @@
 #include "llama-mmap.h"
 #include "llama-model.h"
 #include "llama-ext.h"
-#include "llama.h"
 
 #include <cinttypes>
 #include <cmath>
@@ -219,10 +217,10 @@ llama_context::llama_context(
 
     if (!hparams.vocab_only) {
         // GPU backends
-        for (const auto & dev : model.devices) {
-            ggml_backend_t backend = ggml_backend_dev_init(dev.dev, nullptr);
+        for (auto * dev : model.devices) {
+            ggml_backend_t backend = ggml_backend_dev_init(dev, nullptr);
             if (backend == nullptr) {
-                throw std::runtime_error(format("failed to initialize %s backend", ggml_backend_dev_name(dev.dev)));
+                throw std::runtime_error(format("failed to initialize %s backend", ggml_backend_dev_name(dev)));
             }
             backends.emplace_back(backend);
         }
@@ -297,8 +295,8 @@ llama_context::llama_context(
 
             if (backend_type == GGML_BACKEND_DEVICE_TYPE_CPU && !model.devices.empty()) {
                 // use the host buffer of the first device CPU for faster transfer of the intermediate state
-                const auto & dev = model.devices[0];
-                auto * host_buft = ggml_backend_dev_host_buffer_type(dev.dev);
+                auto * dev = model.devices[0];
+                auto * host_buft = ggml_backend_dev_host_buffer_type(dev);
                 if (host_buft) {
                     buft = host_buft;
                 }
@@ -1022,11 +1020,9 @@ void llama_context::set_abort_callback(bool (*abort_callback)(void * data), void
 
     for (auto & backend : backends) {
         auto * reg = ggml_backend_dev_backend_reg(ggml_backend_get_device(backend.get()));
-        if (reg) {
-            auto * set_abort_callback_fn = (ggml_backend_set_abort_callback_t) ggml_backend_reg_get_proc_address(reg, "ggml_backend_set_abort_callback");
-            if (set_abort_callback_fn) {
-                set_abort_callback_fn(backend.get(), this->abort_callback, this->abort_callback_data);
-            }
+        auto * set_abort_callback_fn = (ggml_backend_set_abort_callback_t) ggml_backend_reg_get_proc_address(reg, "ggml_backend_set_abort_callback");
+        if (set_abort_callback_fn) {
+            set_abort_callback_fn(backend.get(), this->abort_callback, this->abort_callback_data);
         }
     }
 }
@@ -1063,6 +1059,44 @@ void llama_context::set_warmup(bool value) {
 
     // warmups are usually with small batches, so no need to reserve
     //sched_need_reserve = true;
+}
+
+void llama_context::set_eagle3(const llama_model * model_eagle3) {
+    const auto & hp = model_eagle3->hparams;
+    eagle3.extract_layer_indices.clear();
+
+    for (int i = 0; i < 3; i++) {
+        if (hp.eagle3_extract_layers[i] >= 0) {
+            eagle3.extract_layer_indices.push_back(hp.eagle3_extract_layers[i]);
+        }
+    }
+
+    cparams.eagle3_extract_enabled = !eagle3.extract_layer_indices.empty();
+    sched_need_reserve = true;
+
+    LLAMA_LOG_INFO("%s: EAGLE3 feature extraction enabled for %zu layers: [", __func__,
+            eagle3.extract_layer_indices.size());
+    for (size_t i = 0; i < eagle3.extract_layer_indices.size(); i++) {
+        LLAMA_LOG_INFO("%s%d", i > 0 ? ", " : "", eagle3.extract_layer_indices[i]);
+    }
+    LLAMA_LOG_INFO("]\n");
+}
+
+const float * llama_context::get_eagle3_target_features(int32_t * n_features) {
+    if (eagle3.target_features.empty()) {
+        if (n_features) *n_features = 0;
+        return nullptr;
+    }
+    if (n_features) *n_features = (int32_t) eagle3.target_features.size();
+    return eagle3.target_features.data();
+}
+
+void llama_context::set_eagle3_g_embeddings(const float * data, int32_t n_tokens) {
+    const int64_t n_embd_val = model.hparams.n_embd;
+    eagle3.g_embeddings.resize(n_embd_val * n_tokens);
+    if (data) {
+        memcpy(eagle3.g_embeddings.data(), data, n_embd_val * n_tokens * sizeof(float));
+    }
 }
 
 bool llama_context::set_sampler(llama_seq_id seq_id, llama_sampler * sampler) {
@@ -1184,6 +1218,8 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
 
     if (!graph_reuse_disable && res->can_reuse(gparams)) {
         //LLAMA_LOG_DEBUG("%s: reusing previous graph\n", __func__);
+        LLAMA_LOG_WARN("%s: graph reused [%s], eagle3_extract=%d, extract_tensors=%zu\n", __func__,
+            model.name.c_str(), (int)cparams.eagle3_extract_enabled, eagle3.extract_tensors.size());
 
         // with pipeline parallelism, the previous graph_compute_async may still be running
         // on the GPU. we must synchronize before set_inputs to avoid overwriting input tensors
@@ -1202,6 +1238,9 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         //const auto t_start_us = ggml_time_us();
 
         gf = model.build_graph(gparams);
+        LLAMA_LOG_WARN("%s: graph REBUILT [%s], eagle3_extract=%d, extract_tensors=%zu, extract_layers=%zu\n", __func__,
+            model.name.c_str(), (int)cparams.eagle3_extract_enabled, eagle3.extract_tensors.size(),
+            eagle3.extract_layer_indices.size());
 
         //LLAMA_LOG_INFO("graph build time: %.3f ms\n", (ggml_time_us() - t_start_us)/1000.0);
 
@@ -1234,6 +1273,33 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         ret = status;
         return nullptr;
     }
+
+    // EAGLE3: extract hidden states from target model layers after compute
+    if (cparams.eagle3_extract_enabled) {
+        LLAMA_LOG_WARN("%s: EAGLE3 extraction check [%s]: enabled=%d, tensors=%zu\n", __func__,
+            model.name.c_str(), (int)cparams.eagle3_extract_enabled, eagle3.extract_tensors.size());
+        if (!eagle3.extract_tensors.empty()) {
+        const int64_t n_embd = model.hparams.n_embd_inp();
+        const int64_t n_tokens_batch = ubatch.n_tokens;
+        const size_t n_layers = eagle3.extract_tensors.size();
+
+        eagle3.target_features.resize(n_layers * n_embd * n_tokens_batch);
+        eagle3.n_tokens_last_batch = n_tokens_batch;
+
+        for (size_t i = 0; i < n_layers; i++) {
+            ggml_tensor * t = eagle3.extract_tensors[i];
+            if (t) {
+                // Read computed tensor data from backend to host
+                const size_t tensor_bytes = ggml_nbytes(t);
+                const size_t wanted_bytes = n_embd * n_tokens_batch * sizeof(float);
+                const size_t copy_bytes = std::min(tensor_bytes, wanted_bytes);
+                ggml_backend_tensor_get(t,
+                    eagle3.target_features.data() + i * n_embd * n_tokens_batch,
+                    0, copy_bytes);
+            }
+        }
+        } // !eagle3.extract_tensors.empty()
+    } // eagle3_extract_enabled
 
     ret = GGML_STATUS_SUCCESS;
 
@@ -2162,6 +2228,7 @@ llm_graph_params llama_context::graph_params(
         /*.loras       =*/ loras.get(),
         /*.mctx        =*/ mctx,
         /*.cross       =*/ &cross,
+        /*.eagle3      =*/ const_cast<llama_eagle3 *>(&eagle3),
         /*.samplers    =*/ sampling.samplers,
         /*.n_outputs   =*/ n_outputs,
         /*.cb          =*/ graph_get_cb(),
@@ -2636,7 +2703,7 @@ void llama_context::perf_reset() {
     n_reused    = 0;
 }
 
-llama_memory_breakdown llama_context::memory_breakdown() const {
+std::map<ggml_backend_buffer_type_t, llama_memory_breakdown_data> llama_context::memory_breakdown() const {
     std::map<ggml_backend_buffer_type_t, llama_memory_breakdown_data> ret;
     for (const auto & [buft, size] : model.memory_breakdown()) {
         ret[buft].model += size;
@@ -2946,22 +3013,7 @@ llama_context * llama_init_from_model(
         params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED;
     }
 
-    if (model->split_mode() == LLAMA_SPLIT_MODE_TENSOR) {
-        if (params.flash_attn_type == LLAMA_FLASH_ATTN_TYPE_AUTO) {
-            LLAMA_LOG_INFO("%s: enabling flash_attn since it is required for SPLIT_MODE_TENSOR\n", __func__);
-            params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-        }
-        if (params.flash_attn_type != LLAMA_FLASH_ATTN_TYPE_ENABLED) {
-            LLAMA_LOG_ERROR("%s: SPLIT_MODE_TENSOR requires flash_attn to be enabled\n", __func__);
-            return nullptr;
-        }
-        if (ggml_is_quantized(params.type_k) || ggml_is_quantized(params.type_v)) {
-            LLAMA_LOG_ERROR("%s: simultaneous use of SPLIT_MODE_TENSOR and KV cache quantization not implemented\n", __func__);
-            return nullptr;
-        }
-    }
-
-    if (params.flash_attn_type != LLAMA_FLASH_ATTN_TYPE_DISABLED && ggml_is_quantized(params.type_k)) {
+    if (params.flash_attn_type == LLAMA_FLASH_ATTN_TYPE_AUTO && ggml_is_quantized(params.type_k)) {
         const uint32_t blck_size = ggml_blck_size(params.type_k);
         for (uint32_t il = 0; il < model->hparams.n_layer; ++il) {
             if (model->hparams.n_embd_head_k(il) % blck_size != 0) {
@@ -2972,7 +3024,7 @@ llama_context * llama_init_from_model(
         }
     }
 
-    if (params.flash_attn_type != LLAMA_FLASH_ATTN_TYPE_DISABLED && ggml_is_quantized(params.type_v)) {
+    if (params.flash_attn_type == LLAMA_FLASH_ATTN_TYPE_AUTO && ggml_is_quantized(params.type_v)) {
         const uint32_t blck_size = ggml_blck_size(params.type_v);
         for (uint32_t il = 0; il < model->hparams.n_layer; ++il) {
             if (model->hparams.n_embd_head_v(il) % blck_size != 0) {
@@ -3123,6 +3175,67 @@ float * llama_get_embeddings_seq(llama_context * ctx, llama_seq_id seq_id) {
     ctx->synchronize();
 
     return ctx->get_embeddings_seq(seq_id);
+}
+
+// EAGLE3 API implementations
+
+void llama_set_eagle3(llama_context * ctx_tgt, const llama_model * model_eagle3) {
+    ctx_tgt->set_eagle3(model_eagle3);
+}
+
+const float * llama_get_eagle3_target_features(llama_context * ctx_tgt, int32_t * n_features) {
+    ctx_tgt->synchronize();
+    return ctx_tgt->get_eagle3_target_features(n_features);
+}
+
+void llama_set_eagle3_g_embeddings(llama_context * ctx_eagle3, const float * data, int32_t n_tokens) {
+    ctx_eagle3->set_eagle3_g_embeddings(data, n_tokens);
+}
+
+int32_t llama_model_eagle3_n_aux_layers(const llama_model * model) {
+    int n = 0;
+    for (int i = 0; i < 3; i++) {
+        if (model->hparams.eagle3_extract_layers[i] >= 0) n++;
+    }
+    return n > 0 ? n : 3;
+}
+
+int64_t llama_model_eagle3_get_fc_weight(const llama_model * model, float * buf, int64_t buf_size) {
+    const ggml_tensor * fc = model->fc;
+    if (!fc) {
+        LLAMA_LOG_ERROR("%s: model has no fc.weight tensor\n", __func__);
+        return 0;
+    }
+
+    const int64_t n_embd        = fc->ne[1];
+    const int64_t fc_input_size = fc->ne[0];
+    const int64_t n_elements    = n_embd * fc_input_size;
+
+    if (buf_size < n_elements) {
+        LLAMA_LOG_ERROR("%s: buffer too small (%lld < %lld)\n", __func__,
+                (long long)buf_size, (long long)n_elements);
+        return 0;
+    }
+
+    if (fc->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_get(fc, buf, 0, n_elements * sizeof(float));
+    } else {
+        const size_t n_bytes = ggml_nbytes(fc);
+        std::vector<uint8_t> raw(n_bytes);
+        ggml_backend_tensor_get(fc, raw.data(), 0, n_bytes);
+
+        const auto * traits = ggml_get_type_traits(fc->type);
+        if (!traits->to_float) {
+            LLAMA_LOG_ERROR("%s: no dequant path for fc.weight type %d\n", __func__, (int)fc->type);
+            return 0;
+        }
+        traits->to_float(raw.data(), buf, n_elements);
+    }
+
+    LLAMA_LOG_INFO("%s: fc.weight [%lld x %lld] type=%d → F32 host\n", __func__,
+            (long long)n_embd, (long long)fc_input_size, (int)fc->type);
+
+    return fc_input_size;
 }
 
 bool llama_set_sampler(llama_context * ctx, llama_seq_id seq_id, llama_sampler * smpl) {
@@ -3493,6 +3606,142 @@ void llama_perf_context_reset(llama_context * ctx) {
     ctx->perf_reset();
 }
 
+void llama_memory_breakdown_print(const struct llama_context * ctx) {
+    const std::vector<ggml_backend_dev_t> & devices = ctx->get_model().devices;
+
+    std::map<ggml_backend_buffer_type_t, llama_memory_breakdown_data> memory_breakdown = ctx->memory_breakdown();
+
+    std::vector<std::array<std::string, 9>> table_data;
+    table_data.reserve(devices.size());
+    const std::string template_header = "%s: | %s | %s   %s    %s   %s   %s   %s    %s |\n";
+    const std::string template_gpu    = "%s: | %s | %s = %s + (%s = %s + %s + %s) + %s |\n";
+    const std::string template_other  = "%s: | %s | %s   %s    %s = %s + %s + %s    %s |\n";
+
+    table_data.push_back({template_header, "memory breakdown [MiB]", "total", "free", "self", "model", "context", "compute", "unaccounted"});
+
+    constexpr size_t MiB = 1024 * 1024;
+    const std::vector<std::string> desc_prefixes_strip = {"NVIDIA ", "GeForce ", "Tesla ", "AMD ", "Radeon ", "Instinct "};
+
+    // track seen buffer types to avoid double counting:
+    std::set<ggml_backend_buffer_type_t> seen_buffer_types;
+
+    // accumulative memory breakdown for each device and for host:
+    std::vector<llama_memory_breakdown_data> mb_dev(devices.size());
+    llama_memory_breakdown_data              mb_host;
+
+    for (const auto & buft_mb : memory_breakdown) {
+        ggml_backend_buffer_type_t          buft = buft_mb.first;
+        const llama_memory_breakdown_data & mb   = buft_mb.second;
+        if (ggml_backend_buft_is_host(buft)) {
+            mb_host.model   += mb.model;
+            mb_host.context += mb.context;
+            mb_host.compute += mb.compute;
+            seen_buffer_types.insert(buft);
+            continue;
+        }
+        ggml_backend_dev_t dev = ggml_backend_buft_get_device(buft);
+        if (dev) {
+            int i_dev = -1;
+            for (size_t i = 0; i < devices.size(); i++) {
+                if (devices[i] == dev) {
+                    i_dev = i;
+                    break;
+                }
+            }
+            if (i_dev != -1) {
+                mb_dev[i_dev].model   += mb.model;
+                mb_dev[i_dev].context += mb.context;
+                mb_dev[i_dev].compute += mb.compute;
+                seen_buffer_types.insert(buft);
+                continue;
+            }
+        }
+    }
+
+    // print memory breakdown for each device:
+    for (size_t i = 0; i < devices.size(); i++) {
+        ggml_backend_dev_t          dev = devices[i];
+        llama_memory_breakdown_data mb  = mb_dev[i];
+
+        const std::string name = ggml_backend_dev_name(dev);
+        std::string desc = ggml_backend_dev_description(dev);
+        for (const std::string & prefix : desc_prefixes_strip) {
+            if (desc.length() >= prefix.length() && desc.substr(0, prefix.length()) == prefix) {
+                desc = desc.substr(prefix.length());
+            }
+        }
+
+        size_t free, total;
+        ggml_backend_dev_memory(dev, &free, &total);
+
+        const size_t self = mb.model + mb.context + mb.compute;
+        const size_t unaccounted = total - self - free;
+
+        table_data.push_back({
+            template_gpu,
+            "  - " + name + " (" + desc + ")",
+            std::to_string(total / MiB),
+            std::to_string(free / MiB),
+            std::to_string(self / MiB),
+            std::to_string(mb.model / MiB),
+            std::to_string(mb.context / MiB),
+            std::to_string(mb.compute / MiB),
+            std::to_string(unaccounted / MiB)});
+    }
+
+    // print memory breakdown for host:
+    {
+        const size_t self = mb_host.model + mb_host.context + mb_host.compute;
+        table_data.push_back({
+            template_other,
+            "  - Host",
+            "", // total
+            "", // free
+            std::to_string(self / MiB),
+            std::to_string(mb_host.model / MiB),
+            std::to_string(mb_host.context / MiB),
+            std::to_string(mb_host.compute / MiB),
+            ""}); // unaccounted
+    }
+
+    // print memory breakdown for all remaining buffer types:
+    for (const auto & buft_mb : memory_breakdown) {
+        ggml_backend_buffer_type_t          buft = buft_mb.first;
+        const llama_memory_breakdown_data & mb   = buft_mb.second;
+        if (seen_buffer_types.count(buft) == 1) {
+            continue;
+        }
+        const std::string name = ggml_backend_buft_name(buft);
+        const size_t self = mb.model + mb.context + mb.compute;
+        table_data.push_back({
+            template_other,
+            "  - " + name,
+            "", // total
+            "", // free
+            std::to_string(self / MiB),
+            std::to_string(mb.model / MiB),
+            std::to_string(mb.context / MiB),
+            std::to_string(mb.compute / MiB),
+            ""}); // unaccounted
+        seen_buffer_types.insert(buft);
+    }
+
+    for (size_t j = 1; j < table_data[0].size(); j++) {
+        size_t max_len = 0;
+        for (const auto & td : table_data) {
+            max_len = std::max(max_len, td[j].length());
+        }
+        for (auto & td : table_data) {
+            td[j].insert(j == 1 ? td[j].length() : 0, max_len - td[j].length(), ' ');
+        }
+    }
+    for (const auto & td : table_data) {
+        LLAMA_LOG_INFO(td[0].c_str(),
+            __func__, td[1].c_str(), td[2].c_str(), td[3].c_str(), td[4].c_str(), td[5].c_str(),
+            td[6].c_str(), td[7].c_str(), td[8].c_str());
+    }
+}
+
 //
 // training
 //
@@ -3522,12 +3771,4 @@ void llama_opt_epoch(
         idata_split,
         callback_train,
         callback_eval);
-}
-
-//
-// ext
-//
-
-llama_memory_breakdown llama_get_memory_breakdown(const struct llama_context * ctx) {
-    return ctx->memory_breakdown();
 }

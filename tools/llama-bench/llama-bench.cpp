@@ -19,10 +19,8 @@
 #include <vector>
 #include <unordered_set>
 
-#include "build-info.h"
 #include "common.h"
 #include "download.h"
-#include "fit.h"
 #include "ggml.h"
 #include "llama.h"
 
@@ -262,8 +260,6 @@ static const char * split_mode_str(llama_split_mode mode) {
             return "layer";
         case LLAMA_SPLIT_MODE_ROW:
             return "row";
-        case LLAMA_SPLIT_MODE_TENSOR:
-            return "tensor";
         default:
             GGML_ABORT("invalid split mode");
     }
@@ -346,8 +342,6 @@ struct cmd_params {
     std::vector<bool>                embeddings;
     std::vector<bool>                no_op_offload;
     std::vector<bool>                no_host;
-    std::vector<size_t>              fit_params_target;
-    std::vector<uint32_t>            fit_params_min_ctx;
     ggml_numa_strategy               numa;
     int                              reps;
     ggml_sched_priority              prio;
@@ -390,8 +384,6 @@ static const cmd_params cmd_params_defaults = {
     /* embeddings           */ { false },
     /* no_op_offload        */ { false },
     /* no_host              */ { false },
-    /* fit_params_target    */ { 0 },
-    /* fit_params_min_ctx   */ { 0 },
     /* numa                 */ GGML_NUMA_STRATEGY_DISABLED,
     /* reps                 */ 5,
     /* prio                 */ GGML_SCHED_PRIO_NORMAL,
@@ -418,8 +410,6 @@ static void print_usage(int /* argc */, char ** argv) {
     printf("  -v, --verbose                               verbose output\n");
     printf("  --progress                                  print test progress indicators\n");
     printf("  --no-warmup                                 skip warmup runs before benchmarking\n");
-    printf("  -fitt, --fit-target <MiB>                   fit model to device memory with this margin per device in MiB (default: off)\n");
-    printf("  -fitc, --fit-ctx <n>                        minimum ctx size for --fit-target (default: 4096)\n");
     if (llama_supports_rpc()) {
         printf("  -rpc, --rpc <rpc_servers>                   register RPC devices (comma separated)\n");
     }
@@ -448,7 +438,7 @@ static void print_usage(int /* argc */, char ** argv) {
     printf("  --poll <0...100>                            (default: %s)\n", join(cmd_params_defaults.poll, ",").c_str());
     printf("  -ngl, --n-gpu-layers <n>                    (default: %s)\n", join(cmd_params_defaults.n_gpu_layers, ",").c_str());
     printf("  -ncmoe, --n-cpu-moe <n>                     (default: %s)\n", join(cmd_params_defaults.n_cpu_moe, ",").c_str());
-    printf("  -sm, --split-mode <none|layer|row|tensor>   (default: %s)\n", join(transform_to_str(cmd_params_defaults.split_mode, split_mode_str), ",").c_str());
+    printf("  -sm, --split-mode <none|layer|row>          (default: %s)\n", join(transform_to_str(cmd_params_defaults.split_mode, split_mode_str), ",").c_str());
     printf("  -mg, --main-gpu <i>                         (default: %s)\n", join(cmd_params_defaults.main_gpu, ",").c_str());
     printf("  -nkvo, --no-kv-offload <0|1>                (default: %s)\n", join(cmd_params_defaults.no_kv_offload, ",").c_str());
     printf("  -fa, --flash-attn <0|1>                     (default: %s)\n", join(cmd_params_defaults.flash_attn, ",").c_str());
@@ -492,6 +482,37 @@ static ggml_type ggml_type_from_name(const std::string & s) {
     }
     if (s == "iq4_nl") {
         return GGML_TYPE_IQ4_NL;
+    }
+    if (s == "planar3") {
+        return GGML_TYPE_PLANAR3_0;
+    }
+    if (s == "planar4") {
+        return GGML_TYPE_PLANAR4_0;
+    }
+    if (s == "iso3") {
+        return GGML_TYPE_ISO3_0;
+    }
+    if (s == "iso4") {
+        return GGML_TYPE_ISO4_0;
+    }
+    // RotorQuant shorthand aliases (cross-engine compatible with SGLang)
+    if (s == "rq3") {
+        return GGML_TYPE_PLANAR3_0;
+    }
+    if (s == "rq4") {
+        return GGML_TYPE_PLANAR4_0;
+    }
+    if (s == "rq3_planar") {
+        return GGML_TYPE_PLANAR3_0;
+    }
+    if (s == "rq4_planar") {
+        return GGML_TYPE_PLANAR4_0;
+    }
+    if (s == "rq3_iso") {
+        return GGML_TYPE_ISO3_0;
+    }
+    if (s == "rq4_iso") {
+        return GGML_TYPE_ISO4_0;
     }
 
     return GGML_TYPE_COUNT;
@@ -747,8 +768,6 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
                         mode = LLAMA_SPLIT_MODE_LAYER;
                     } else if (m == "row") {
                         mode = LLAMA_SPLIT_MODE_ROW;
-                    } else if (m == "tensor") {
-                        mode = LLAMA_SPLIT_MODE_TENSOR;
                     } else {
                         invalid_param = true;
                         break;
@@ -970,24 +989,6 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
                 params.progress = true;
             } else if (arg == "--no-warmup") {
                 params.no_warmup = true;
-            } else if (arg == "-fitt" || arg == "--fit-target") {
-                if (++i >= argc) {
-                    invalid_param = true;
-                    break;
-                }
-                auto p = string_split<std::string>(argv[i], split_delim);
-                for (const auto & v : p) {
-                    params.fit_params_target.push_back(std::stoull(v));
-                }
-            } else if (arg == "-fitc" || arg == "--fit-ctx") {
-                if (++i >= argc) {
-                    invalid_param = true;
-                    break;
-                }
-                auto p = string_split<std::string>(argv[i], split_delim);
-                for (const auto & v : p) {
-                    params.fit_params_min_ctx.push_back(std::stoul(v));
-                }
             } else {
                 invalid_param = true;
                 break;
@@ -1016,9 +1017,7 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
                 model.hf_file = params.hf_file[i];
             }
 
-            common_download_opts opts;
-            opts.bearer_token = params.hf_token;
-            auto download_result = common_download_model(model, opts);
+            auto download_result = common_download_model(model, params.hf_token);
             if (download_result.model_path.empty()) {
                 fprintf(stderr, "error: failed to download model from HuggingFace\n");
                 exit(1);
@@ -1110,12 +1109,6 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
     if (params.poll.empty()) {
         params.poll = cmd_params_defaults.poll;
     }
-    if (params.fit_params_target.empty()) {
-        params.fit_params_target = cmd_params_defaults.fit_params_target;
-    }
-    if (params.fit_params_min_ctx.empty()) {
-        params.fit_params_min_ctx = cmd_params_defaults.fit_params_min_ctx;
-    }
 
     return params;
 }
@@ -1147,8 +1140,6 @@ struct cmd_params_instance {
     bool               embeddings;
     bool               no_op_offload;
     bool               no_host;
-    size_t             fit_target;
-    uint32_t           fit_min_ctx;
 
     llama_model_params to_llama_mparams() const {
         llama_model_params mparams = llama_model_default_params();
@@ -1237,8 +1228,6 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
     // this ordering minimizes the number of times that each model needs to be reloaded
     // clang-format off
     for (const auto & m : params.model)
-    for (const auto & fpt : params.fit_params_target)
-    for (const auto & fpc : params.fit_params_min_ctx)
     for (const auto & nl : params.n_gpu_layers)
     for (const auto & ncmoe : params.n_cpu_moe)
     for (const auto & sm : params.split_mode)
@@ -1293,8 +1282,6 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
                 /* .embeddings   = */ embd,
                 /* .no_op_offload= */ nopo,
                 /* .no_host      = */ noh,
-                /* .fit_target   = */ fpt,
-                /* .fit_min_ctx  = */ fpc,
             };
             instances.push_back(instance);
         }
@@ -1330,8 +1317,6 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
                 /* .embeddings   = */ embd,
                 /* .no_op_offload= */ nopo,
                 /* .no_host      = */ noh,
-                /* .fit_target   = */ fpt,
-                /* .fit_min_ctx  = */ fpc,
             };
             instances.push_back(instance);
         }
@@ -1367,8 +1352,6 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
                 /* .embeddings   = */ embd,
                 /* .no_op_offload= */ nopo,
                 /* .no_host      = */ noh,
-                /* .fit_target   = */ fpt,
-                /* .fit_min_ctx  = */ fpc,
             };
             instances.push_back(instance);
         }
@@ -1409,8 +1392,6 @@ struct test {
     bool                     embeddings;
     bool                     no_op_offload;
     bool                     no_host;
-    size_t                   fit_target;
-    uint32_t                 fit_min_ctx;
     int                      n_prompt;
     int                      n_gen;
     int                      n_depth;
@@ -1449,8 +1430,6 @@ struct test {
         embeddings     = inst.embeddings;
         no_op_offload  = inst.no_op_offload;
         no_host        = inst.no_host;
-        fit_target     = inst.fit_target;
-        fit_min_ctx    = inst.fit_min_ctx;
         n_prompt       = inst.n_prompt;
         n_gen          = inst.n_gen;
         n_depth        = inst.n_depth;
@@ -1508,8 +1487,7 @@ struct test {
             "type_k",         "type_v",         "n_gpu_layers",  "n_cpu_moe",      "split_mode",
             "main_gpu",       "no_kv_offload",  "flash_attn",    "devices",        "tensor_split",
             "tensor_buft_overrides",            "use_mmap",      "use_direct_io",  "embeddings",
-            "no_op_offload",  "no_host",        "fit_target",     "fit_min_ctx",
-            "n_prompt",       "n_gen",          "n_depth",
+            "no_op_offload",  "no_host",        "n_prompt",      "n_gen",          "n_depth",
             "test_time",      "avg_ns",         "stddev_ns",     "avg_ts",         "stddev_ts"
         };
         return fields;
@@ -1521,8 +1499,7 @@ struct test {
         if (field == "build_number" || field == "n_batch" || field == "n_ubatch" || field == "n_threads" ||
             field == "poll" || field == "model_size" || field == "model_n_params" || field == "n_gpu_layers" ||
             field == "main_gpu" || field == "n_prompt" || field == "n_gen" || field == "n_depth" || field == "avg_ns" ||
-            field == "stddev_ns" || field == "no_op_offload" || field == "n_cpu_moe" ||
-            field == "fit_target" || field == "fit_min_ctx") {
+            field == "stddev_ns" || field == "no_op_offload" || field == "n_cpu_moe") {
             return INT;
         }
         if (field == "f16_kv" || field == "no_kv_offload" || field == "cpu_strict" || field == "flash_attn" ||
@@ -1603,8 +1580,6 @@ struct test {
                                             std::to_string(embeddings),
                                             std::to_string(no_op_offload),
                                             std::to_string(no_host),
-                                            std::to_string(fit_target),
-                                            std::to_string(fit_min_ctx),
                                             std::to_string(n_prompt),
                                             std::to_string(n_gen),
                                             std::to_string(n_depth),
@@ -1626,8 +1601,8 @@ struct test {
     }
 };
 
-const std::string test::build_commit = llama_commit();
-const int         test::build_number = llama_build_number();
+const std::string test::build_commit = LLAMA_COMMIT;
+const int         test::build_number = LLAMA_BUILD_NUMBER;
 
 struct printer {
     virtual ~printer() {}
@@ -1776,7 +1751,7 @@ struct markdown_printer : public printer {
             return 6;
         }
         if (field == "split_mode") {
-            return 6;
+            return 5;
         }
         if (field == "flash_attn") {
             return 2;
@@ -1847,12 +1822,6 @@ struct markdown_printer : public printer {
         }
         if (field == "tensor_buft_overrides") {
             return "ot";
-        }
-        if (field == "fit_target") {
-            return "fitt";
-        }
-        if (field == "fit_min_ctx") {
-            return "fitc";
         }
         return field;
     }
@@ -1931,12 +1900,6 @@ struct markdown_printer : public printer {
         }
         if (params.no_host.size() > 1 || params.no_host != cmd_params_defaults.no_host) {
             fields.emplace_back("no_host");
-        }
-        if (params.fit_params_target.size() > 1 || params.fit_params_target != cmd_params_defaults.fit_params_target) {
-            fields.emplace_back("fit_target");
-        }
-        if (params.fit_params_min_ctx.size() > 1 || params.fit_params_min_ctx != cmd_params_defaults.fit_params_min_ctx) {
-            fields.emplace_back("fit_min_ctx");
         }
         fields.emplace_back("test");
         fields.emplace_back("t/s");
@@ -2209,49 +2172,13 @@ int main(int argc, char ** argv) {
         if (params.progress) {
             fprintf(stderr, "llama-bench: benchmark %d/%zu: starting\n", params_idx, params_count);
         }
-        auto mparams = inst.to_llama_mparams();
-        auto cparams = inst.to_llama_cparams();
-
-        bool do_fit = inst.fit_target != cmd_params_defaults.fit_params_target[0] ||
-                      inst.fit_min_ctx != cmd_params_defaults.fit_params_min_ctx[0];
-
-        std::vector<float> fit_tensor_split(llama_max_devices(), 0.0f);
-        std::vector<llama_model_tensor_buft_override> fit_overrides(llama_max_tensor_buft_overrides(), {nullptr, nullptr});
-
-        if (do_fit) {
-            // free the previous model so fit sees full free VRAM
-            if (lmodel) {
-                llama_model_free(lmodel);
-                lmodel    = nullptr;
-                prev_inst = nullptr;
-            }
-
-            // use default n_gpu_layers and n_ctx so common_fit_params can adjust them
-            mparams.n_gpu_layers          = llama_model_default_params().n_gpu_layers;
-            mparams.tensor_split          = fit_tensor_split.data();
-            mparams.tensor_buft_overrides = fit_overrides.data();
-            cparams.n_ctx                 = 0;
-
-            std::vector<size_t> margins(llama_max_devices(), inst.fit_target * 1024 * 1024);
-
-            uint32_t n_ctx_needed = inst.n_prompt + inst.n_gen + inst.n_depth;
-            cparams.n_ctx = std::max(cparams.n_ctx, n_ctx_needed);
-
-            common_fit_params(inst.model.c_str(), &mparams, &cparams,
-                fit_tensor_split.data(),
-                fit_overrides.data(),
-                margins.data(),
-                inst.fit_min_ctx,
-                params.verbose ? GGML_LOG_LEVEL_DEBUG : GGML_LOG_LEVEL_ERROR);
-       }
-
         // keep the same model between tests when possible
         if (!lmodel || !prev_inst || !inst.equal_mparams(*prev_inst)) {
             if (lmodel) {
                 llama_model_free(lmodel);
             }
 
-            lmodel = llama_model_load_from_file(inst.model.c_str(), mparams);
+            lmodel = llama_model_load_from_file(inst.model.c_str(), inst.to_llama_mparams());
             if (lmodel == NULL) {
                 fprintf(stderr, "%s: error: failed to load model '%s'\n", __func__, inst.model.c_str());
                 return 1;
@@ -2259,7 +2186,7 @@ int main(int argc, char ** argv) {
             prev_inst = &inst;
         }
 
-        llama_context * ctx = llama_init_from_model(lmodel, cparams);
+        llama_context * ctx = llama_init_from_model(lmodel, inst.to_llama_cparams());
         if (ctx == NULL) {
             fprintf(stderr, "%s: error: failed to create context with model '%s'\n", __func__, inst.model.c_str());
             llama_model_free(lmodel);

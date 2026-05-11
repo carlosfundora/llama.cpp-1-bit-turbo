@@ -186,6 +186,104 @@ static __device__ void quantize_f32_iq4_nl_block(const float * __restrict__ x, b
     y->d = sumq2 > 0 ? sumqx/sumq2 : d;
 }
 
+// RotorQuant PlanarQuant 3-bit block quantizer
+// Block: 128 floats → norm(f16) + qs[32](2-bit magnitude) + signs[16](1-bit sign)
+static __device__ void quantize_f32_planar3_0_block(const float * __restrict__ x, block_planar3_0 * __restrict__ y) {
+    float norm = 0.0f;
+    for (int j = 0; j < QK_PLANAR3; ++j) {
+        const float av = fabsf(x[j]);
+        if (av > norm) norm = av;
+    }
+    y->norm = __float2half(norm);
+    #pragma unroll
+    for (int j = 0; j < 32; ++j) y->qs[j]    = 0;
+    #pragma unroll
+    for (int j = 0; j < 16; ++j) y->signs[j] = 0;
+
+    if (norm == 0.0f) return;
+    const float inv_norm = 1.0f / norm;
+    for (int j = 0; j < QK_PLANAR3; ++j) {
+        const float val  = x[j];
+        const int   sign = (val < 0.0f) ? 1 : 0;
+        int midx = (int)(fabsf(val) * inv_norm * 4.0f);
+        if (midx > 3) midx = 3;
+        y->qs[j / 4]    |= (uint8_t)((midx & 0x3) << ((j % 4) * 2));
+        if (sign) y->signs[j / 8] |= (uint8_t)(1 << (j % 8));
+    }
+}
+
+// RotorQuant PlanarQuant 4-bit block quantizer
+// Block: 128 floats → norm(f16) + rnorm(f16) + qs[64](4-bit nibble-packed)
+static __device__ void quantize_f32_planar4_0_block(const float * __restrict__ x, block_planar4_0 * __restrict__ y) {
+    float norm = 0.0f;
+    for (int j = 0; j < QK_PLANAR4; ++j) {
+        const float av = fabsf(x[j]);
+        if (av > norm) norm = av;
+    }
+    y->norm  = __float2half(norm);
+    y->rnorm = __float2half(norm > 0.0f ? 1.0f / norm : 0.0f);
+    #pragma unroll
+    for (int j = 0; j < 64; ++j) y->qs[j] = 0;
+
+    if (norm == 0.0f) return;
+    const float inv_norm = 1.0f / norm;
+    for (int j = 0; j < QK_PLANAR4; ++j) {
+        float fq = x[j] * inv_norm * 7.5f + 7.5f;
+        int q = __float2int_rn(fq);
+        if (q < 0) q = 0; if (q > 15) q = 15;
+        if (j % 2 == 0) y->qs[j / 2]  = (uint8_t)(q & 0xF);
+        else             y->qs[j / 2] |= (uint8_t)((q & 0xF) << 4);
+    }
+}
+
+// RotorQuant IsoQuant 3-bit block quantizer (identical layout to planar3)
+static __device__ void quantize_f32_iso3_0_block(const float * __restrict__ x, block_iso3_0 * __restrict__ y) {
+    float norm = 0.0f;
+    for (int j = 0; j < QK_ISO3; ++j) {
+        const float av = fabsf(x[j]);
+        if (av > norm) norm = av;
+    }
+    y->norm = __float2half(norm);
+    #pragma unroll
+    for (int j = 0; j < 32; ++j) y->qs[j]    = 0;
+    #pragma unroll
+    for (int j = 0; j < 16; ++j) y->signs[j] = 0;
+
+    if (norm == 0.0f) return;
+    const float inv_norm = 1.0f / norm;
+    for (int j = 0; j < QK_ISO3; ++j) {
+        const float val  = x[j];
+        const int   sign = (val < 0.0f) ? 1 : 0;
+        int midx = (int)(fabsf(val) * inv_norm * 4.0f);
+        if (midx > 3) midx = 3;
+        y->qs[j / 4]    |= (uint8_t)((midx & 0x3) << ((j % 4) * 2));
+        if (sign) y->signs[j / 8] |= (uint8_t)(1 << (j % 8));
+    }
+}
+
+// RotorQuant IsoQuant 4-bit block quantizer (identical layout to planar4)
+static __device__ void quantize_f32_iso4_0_block(const float * __restrict__ x, block_iso4_0 * __restrict__ y) {
+    float norm = 0.0f;
+    for (int j = 0; j < QK_ISO4; ++j) {
+        const float av = fabsf(x[j]);
+        if (av > norm) norm = av;
+    }
+    y->norm  = __float2half(norm);
+    y->rnorm = __float2half(norm > 0.0f ? 1.0f / norm : 0.0f);
+    #pragma unroll
+    for (int j = 0; j < 64; ++j) y->qs[j] = 0;
+
+    if (norm == 0.0f) return;
+    const float inv_norm = 1.0f / norm;
+    for (int j = 0; j < QK_ISO4; ++j) {
+        float fq = x[j] * inv_norm * 7.5f + 7.5f;
+        int q = __float2int_rn(fq);
+        if (q < 0) q = 0; if (q > 15) q = 15;
+        if (j % 2 == 0) y->qs[j / 2]  = (uint8_t)(q & 0xF);
+        else             y->qs[j / 2] |= (uint8_t)((q & 0xF) << 4);
+    }
+}
+
 // Wrapper functions for cpy.cu compatibility
 static __device__ void cpy_blck_f32_q4_0(const char * cxi, char * cdsti) {
     quantize_f32_q4_0_block((const float *)cxi, (block_q4_0 *)cdsti);

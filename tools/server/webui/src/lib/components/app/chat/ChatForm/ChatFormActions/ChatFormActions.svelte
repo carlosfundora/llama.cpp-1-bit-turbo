@@ -62,14 +62,10 @@
 		chatStore.getConversationModel(activeMessages() as DatabaseMessage[])
 	);
 
-	let lastSyncedConversationModel: string | null = null;
-
 	$effect(() => {
-		if (conversationModel && conversationModel !== lastSyncedConversationModel) {
-			lastSyncedConversationModel = conversationModel;
+		if (conversationModel) {
 			modelsStore.selectModelByName(conversationModel);
 		} else if (isRouter && !modelsStore.selectedModelId && modelsStore.loadedModelIds.length > 0) {
-			lastSyncedConversationModel = null;
 			// auto-select the first loaded model only when nothing is selected yet
 			const first = modelOptions().find((m) => modelsStore.loadedModelIds.includes(m.model));
 			if (first) modelsStore.selectModelById(first.id);

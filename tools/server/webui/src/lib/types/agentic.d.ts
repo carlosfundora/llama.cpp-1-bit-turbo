@@ -41,7 +41,6 @@ export type AgenticMessage =
 	| {
 			role: MessageRole.ASSISTANT;
 			content?: string | ApiChatMessageContentPart[];
-			reasoning_content?: string;
 			tool_calls?: AgenticToolCallPayload[];
 	  }
 	| {

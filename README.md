@@ -1,34 +1,128 @@
-# llama.cpp
-
-![llama](https://user-images.githubusercontent.com/1991296/230134379-7181e485-c521-4d23-a0d6-f7b3b61ba524.png)
+<div align="center">
+<img src="media/llama-cpp-1bit-turbo-eagle.png" alt="llama.cpp 1-Bit Turbo EAGLE" width="600"></img>
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Release](https://img.shields.io/github/v/release/ggml-org/llama.cpp)](https://github.com/ggml-org/llama.cpp/releases)
-[![Server](https://github.com/ggml-org/llama.cpp/actions/workflows/server.yml/badge.svg)](https://github.com/ggml-org/llama.cpp/actions/workflows/server.yml)
 
-[Manifesto](https://github.com/ggml-org/llama.cpp/discussions/205) / [ggml](https://github.com/ggml-org/ggml) / [ops](https://github.com/ggml-org/llama.cpp/blob/master/docs/ops.md)
+---
+</div>
 
-LLM inference in C/C++
+## llama.cpp 1-Bit Turbo EAGLE — AMD ROCm Inference with 1-Bit Models, RotorQuant KV, and EAGLE3 Speculative Decoding
 
-## Recent API changes
+A fork of [llama.cpp](https://github.com/ggml-org/llama.cpp) that brings high-performance inference to AMD consumer GPUs (RX 6000/7000 series) with 1-bit GGUF model support, RotorQuant KV cache compression, EAGLE3 speculative decoding, and PHANTOM-X ghost-draft speculation.
 
-- [Changelog for `libllama` API](https://github.com/ggml-org/llama.cpp/issues/9289)
-- [Changelog for `llama-server` REST API](https://github.com/ggml-org/llama.cpp/issues/9291)
+---
 
-## Hot topics
+## Core Features
 
-- **Hugging Face cache migration: models downloaded with `-hf` are now stored in the standard Hugging Face cache directory, enabling sharing with other HF tools.**
-- **[guide : using the new WebUI of llama.cpp](https://github.com/ggml-org/llama.cpp/discussions/16938)**
-- [guide : running gpt-oss with llama.cpp](https://github.com/ggml-org/llama.cpp/discussions/15396)
-- [[FEEDBACK] Better packaging for llama.cpp to support downstream consumers 🤗](https://github.com/ggml-org/llama.cpp/discussions/15313)
-- Support for the `gpt-oss` model with native MXFP4 format has been added | [PR](https://github.com/ggml-org/llama.cpp/pull/15091) | [Collaboration with NVIDIA](https://blogs.nvidia.com/blog/rtx-ai-garage-openai-oss) | [Comment](https://github.com/ggml-org/llama.cpp/discussions/15095)
-- Multimodal support arrived in `llama-server`: [#12898](https://github.com/ggml-org/llama.cpp/pull/12898) | [documentation](./docs/multimodal.md)
-- VS Code extension for FIM completions: https://github.com/ggml-org/llama.vscode
-- Vim/Neovim plugin for FIM completions: https://github.com/ggml-org/llama.vim
-- Hugging Face Inference Endpoints now support GGUF out of the box! https://github.com/ggml-org/llama.cpp/discussions/9669
-- Hugging Face GGUF editor: [discussion](https://github.com/ggml-org/llama.cpp/discussions/9268) | [tool](https://huggingface.co/spaces/CISCai/gguf-editor)
+### 📦 PrismML 1-Bit GGUF Model Support (Q1_0_G128)
+Native Q1_0_G128 ternary quantization (-1, 0, +1) with 128-element groups:
+- HIP/CUDA/Metal GPU dequantization and dot-product kernels
+- CPU fallback dequant and quantize-fns
+- Enables GPU inference of [PrismML Bonsai](https://huggingface.co/PrismML) 1-bit GGUF models
+- GGUF type 41 remapped to `GGML_TYPE_Q1_0_g128` for PrismML compatibility
 
-----
+**Benchmarks (AMD RX 6700 XT, 12GB VRAM):**
+
+| Model | Prompt (t/s) | Generation (t/s) | VRAM |
+|-------|-------------|-------------------|------|
+| Bonsai-1.7B | 2152 | 209 | ~0.5 GB |
+| Bonsai-4B | 867 | 122 | ~1.1 GB |
+| Bonsai-8B | 454 | 92 | ~2.2 GB |
+
+### 🌀 RotorQuant KV Cache Compression
+Geometric-rotation-based KV cache quantization ported from the [RotorQuant paper](https://github.com/scrya-com/rotorquant) by [Scrya](https://github.com/scrya-com) (ICLR 2026). Registered as native GGML types with CPU, CUDA/HIP, and Flash Attention support:
+
+| GGML Type | Method | Bits | Rotation |
+|-----------|--------|------|----------|
+| `GGML_TYPE_PLANAR3_0` (44) | PlanarQuant | 3-bit | 2D Givens |
+| `GGML_TYPE_PLANAR4_0` (45) | PlanarQuant | 4-bit | 2D Givens |
+| `GGML_TYPE_ISO3_0` (46) | IsoQuant | 3-bit | Hadamard/Isometric |
+| `GGML_TYPE_ISO4_0` (47) | IsoQuant | 4-bit | Hadamard/Isometric |
+
+- CPU quantize/dequantize, CUDA/HIP dispatch, Flash Attention V-dequant path
+- Data-oblivious (no calibration needed)
+
+### 🦅 EAGLE3 Speculative Decoding
+Full integration of [EAGLE3](https://github.com/SafeAILab/EAGLE) (Lossless Acceleration of LLM Decoding by Feature Extrapolation) by [Yuhui Li et al. / SafeAILab](https://github.com/SafeAILab/EAGLE):
+- Hidden state extraction → FC encoder → 1-layer transformer decoder → autoregressive draft loop
+- GGUF converter for EAGLE3 safetensors (`convert_hf_to_gguf.py`)
+- Automatic weight tying (lm_head → token_embd) for EAGLE3 models
+- `spec_harness` reusable validation tool for any speculative draft model
+- Works with `llama-speculative-simple` — just pass `-md <eagle3.gguf>` alongside your target model
+
+---
+
+## AMD ROCm Exclusive Features
+
+### 👻 PHANTOM-X — Zero-Copy Ghost-Draft N-Gram Speculation
+Single-file C++ implementation (`common/phantom.h`, 525 lines) of our novel speculative decoding algorithm:
+- Bloom filter negative bigram learning with FNV-1a hash and aging
+- N-gram corpus for context-aware draft generation
+- Pinned memory ring buffer for zero-copy CPU→GPU DMA
+- Adaptive ghost-pool scaling (1–8 workers)
+- Integrated into `common/speculative.cpp`
+
+### 🔧 Wave32 RDNA2 Kernel Optimizations
+Custom 128-thread Wave32 paths for RDNA2 architecture:
+- **RMSNorm** — Wave32-optimized reduction
+- **RoPE** — Rotary position embedding for RDNA2 wavefront size
+
+### 🔗 gfx1031 Compatibility
+Full compatibility layer for gfx1031 (RX 6700 XT) via gfx1030 normalization:
+- `HSA_OVERRIDE_GFX_VERSION=10.3.0` environment variable
+- `GPU_TARGETS=gfx1030` build targeting
+- Null context guard for model loading failures (fail-fast on OOM)
+
+---
+
+## Branches
+
+| Branch | What |
+|--------|------|
+| `master` | Main — Q1_0_G128 + EAGLE3 + RotorQuant KV + PHANTOM-X + Wave32 RDNA2 |
+| `audio/lfm2.5-bringup` | LFM2.5-Audio pipeline (experimental) |
+
+---
+
+## Quick Start (ROCm)
+
+### Prerequisites
+- AMD GPU with ROCm support (tested on RX 6700 XT / gfx1031)
+- ROCm 6.x
+- CMake 3.14+
+
+### Build
+```bash
+git clone https://github.com/carlosfundora/llama.cpp-1-bit-turbo.git
+cd llama.cpp-1-bit-turbo
+
+export HSA_OVERRIDE_GFX_VERSION=10.3.0    # Required for gfx1031 → gfx1030
+export GPU_TARGETS=gfx1030
+
+cmake -B build -DGGML_HIP=ON -DGPU_TARGETS=gfx1030 -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```
+
+### Serve a 1-Bit Model
+```bash
+./build/bin/llama-server \
+  -m /path/to/Bonsai-1.7B-Q1_0.gguf \
+  --host 0.0.0.0 --port 8080
+```
+
+### EAGLE3 Speculative Decoding
+```bash
+./build/bin/llama-speculative-simple \
+  -m /path/to/Bonsai-4B.gguf \
+  -md /path/to/Bonsai-4B-EAGLE3-f16.gguf \
+  -ngl 99 -ngld 99 \
+  -p "The capital of France is" \
+  -n 128
+```
+
+---
+
+## Upstream README
 
 ## Quick start
 
@@ -594,3 +688,91 @@ $ echo "source ~/.llama-completion.bash" >> ~/.bashrc
 - [nlohmann/json](https://github.com/nlohmann/json) - Single-header JSON library, used by various tools/examples - MIT License
 - [miniaudio.h](https://github.com/mackron/miniaudio) - Single-header audio format decoder, used by multimodal subsystem - Public domain
 - [subprocess.h](https://github.com/sheredom/subprocess.h) - Single-header process launching solution for C and C++ - Public domain
+
+---
+
+## 1-Bit Turbo EAGLE — CLI Reference
+
+### EAGLE3 Speculative Decoding
+
+Run EAGLE3 speculative decoding with `llama-speculative-simple`:
+
+```bash
+# Basic EAGLE3 speculative decoding
+./build/bin/llama-speculative-simple \
+  -m /path/to/Bonsai-4B.gguf \
+  -md /path/to/Bonsai-4B-EAGLE3-f16.gguf \
+  -ngl 99 -ngld 99 \
+  -p "The capital of France is" \
+  -n 128
+
+# With FlashAttention enabled
+./build/bin/llama-speculative-simple \
+  -m /path/to/Bonsai-4B.gguf \
+  -md /path/to/Bonsai-4B-EAGLE3-f16.gguf \
+  -ngl 99 -ngld 99 --flash-attn \
+  -p "Write a Python function to compute fibonacci numbers" \
+  -n 256
+```
+
+| Flag | Description |
+|------|-------------|
+| `-m <path>` | Target model (Q1_0_G128 GGUF) |
+| `-md <path>` | EAGLE3 draft model (F16 or quantized GGUF) |
+| `-ngl <n>` | GPU layers for target model (99 = all) |
+| `-ngld <n>` | GPU layers for draft model (99 = all) |
+| `--flash-attn` / `-fa` | Enable FlashAttention |
+| `-n <n>` | Number of tokens to generate |
+| `-p <text>` | Prompt text |
+| `--draft-max <n>` | Max draft tokens per round (default: 5) |
+| `--draft-p-min <f>` | Min confidence to continue drafting (default: 0.5) |
+
+### Converting EAGLE3 Models to GGUF
+
+```bash
+# Convert EAGLE3 safetensors → GGUF (auto-detects EAGLE3 architecture)
+python convert_hf_to_gguf.py /path/to/Bonsai-4B-EAGLE3/ --outtype f16
+
+# Weight tying: lm_head is automatically skipped, runtime uses token_embd
+```
+
+### Speculative Harness (spec_harness) — Validation Tool
+
+Reusable tool for validating any speculative draft model against its target:
+
+```bash
+# Build
+cmake --build build --target llama-spec-harness
+
+# Capture target hidden states + tokens
+./build/bin/llama-spec-harness \
+  -m /path/to/Bonsai-4B.gguf -ngl 99 \
+  -p "The capital of France is" -n 50 \
+  -o /tmp/spec_capture.bin
+
+# Validate with Python reference decoder
+python scripts/spec_harness.py validate \
+  --capture /tmp/spec_capture.bin \
+  --eagle3-model /path/to/Bonsai-4B-EAGLE3/ \
+  --report
+```
+
+### Q1_0_G128 Benchmarks (AMD RX 6700 XT, gfx1030, 12GB)
+
+```
+Model           pp (t/s)    tg (t/s)    VRAM
+Bonsai-1.7B     2152        209         ~0.5 GB
+Bonsai-4B       867         122         ~1.1 GB
+Bonsai-8B       454         92          ~2.2 GB
+```
+
+### Environment
+
+```bash
+export HSA_OVERRIDE_GFX_VERSION=10.3.0   # Required for gfx1031 → gfx1030
+export GPU_TARGETS=gfx1030               # Build target
+
+# Build
+cmake -B build -DGGML_HIP=ON -DGPU_TARGETS=gfx1030 -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+```

@@ -113,7 +113,6 @@ enum llm_arch {
     LLM_ARCH_ERNIE4_5_MOE,
     LLM_ARCH_HUNYUAN_MOE,
     LLM_ARCH_HUNYUAN_DENSE,
-    LLM_ARCH_HUNYUAN_VL,
     LLM_ARCH_SMOLLM3,
     LLM_ARCH_OPENAI_MOE,
     LLM_ARCH_LFM2,
@@ -137,6 +136,7 @@ enum llm_arch {
     LLM_ARCH_LLAMA_EMBED,
     LLM_ARCH_MAINCODER,
     LLM_ARCH_KIMI_LINEAR,
+    LLM_ARCH_EAGLE3,
     LLM_ARCH_UNKNOWN,
 };
 
@@ -247,6 +247,10 @@ enum llm_kv {
     LLM_KV_ATTENTION_INDEXER_TOP_K,
     LLM_KV_ATTENTION_SHARED_KV_LAYERS,
 
+    LLM_KV_EAGLE3_EXTRACT_LAYERS,
+    LLM_KV_EAGLE3_TARGET_HIDDEN_SIZE,
+    LLM_KV_EAGLE3_NORM_BEFORE_RESIDUAL,
+
     LLM_KV_ROPE_DIMENSION_COUNT,
     LLM_KV_ROPE_DIMENSION_COUNT_SWA,
     LLM_KV_ROPE_DIMENSION_SECTIONS,
@@ -255,7 +259,6 @@ enum llm_kv {
     LLM_KV_ROPE_SCALE_LINEAR,
     LLM_KV_ROPE_SCALING_TYPE,
     LLM_KV_ROPE_SCALING_FACTOR,
-    LLM_KV_ROPE_SCALING_ALPHA,
     LLM_KV_ROPE_SCALING_ATTN_FACTOR,
     LLM_KV_ROPE_SCALING_ORIG_CTX_LEN,
     LLM_KV_ROPE_SCALING_FINETUNED,
@@ -554,6 +557,9 @@ enum llm_tensor {
     LLM_TENSOR_NEXTN_HNORM,
     LLM_TENSOR_NEXTN_SHARED_HEAD_HEAD,
     LLM_TENSOR_NEXTN_SHARED_HEAD_NORM,
+    LLM_TENSOR_EAGLE3_FC,
+    LLM_TENSOR_EAGLE3_HIDDEN_NORM,
+    LLM_TENSOR_EAGLE3_D2T,
 };
 
 enum llm_tensor_layer {
@@ -586,6 +592,8 @@ struct LLM_TN_IMPL {
     const char * const suffix;
     const int bid;
     const int xid;
+
+    const std::set<llm_tensor> model_tensors;
 
     LLM_TN_IMPL(llm_arch arch, llm_tensor tensor, const char * suffix, int bid, int xid);
 
@@ -632,7 +640,6 @@ llm_arch llm_arch_from_string(const std::string & name);
 
 const llm_tensor_info & llm_tensor_info_for(llm_tensor tensor);
 
-bool llm_arch_is_recurrent      (const llm_arch & arch);
-bool llm_arch_is_hybrid         (const llm_arch & arch);
-bool llm_arch_is_diffusion      (const llm_arch & arch);
-bool llm_arch_supports_sm_tensor(const llm_arch & arch);
+bool llm_arch_is_recurrent(const llm_arch & arch);
+bool llm_arch_is_hybrid   (const llm_arch & arch);
+bool llm_arch_is_diffusion(const llm_arch & arch);

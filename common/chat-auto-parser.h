@@ -4,7 +4,6 @@
 #include "common.h"
 #include "jinja/caps.h"
 #include "peg-parser.h"
-#include "nlohmann/json.hpp"
 
 #include <chrono>
 #include <optional>
@@ -145,6 +144,7 @@ enum class tool_format {
     JSON_NATIVE,      // Pure JSON: {"name": "X", "arguments": {...}}
     TAG_WITH_JSON,    // Tag-based with JSON args: <function=X>{...}</function>
     TAG_WITH_TAGGED,  // Tag-based with tagged args: <param=key>value</param>
+    TAG_WITH_GEMMA4_DICT, // Gemma4 custom dict: <|tool_call>call:name{key:<|"|>val<|"|>}<tool_call|>
 };
 
 inline std::ostream & operator<<(std::ostream & os, const tool_format & format) {
@@ -157,6 +157,8 @@ inline std::ostream & operator<<(std::ostream & os, const tool_format & format) 
             return os << "TAG_WITH_JSON";
         case tool_format::TAG_WITH_TAGGED:
             return os << "TAG_WITH_TAGGED";
+        case tool_format::TAG_WITH_GEMMA4_DICT:
+            return os << "TAG_WITH_GEMMA4_DICT";
         default:
             return os << "UNKNOWN";
     }
@@ -213,14 +215,12 @@ struct tool_id_analysis {
 // ============================================================================
 
 struct analyze_content;
-struct analyze_reasoning;
 
 struct parser_build_context {
     common_chat_peg_builder & p;
-    const generation_params &         inputs;
+    const generation_params &          inputs;
     common_peg_parser                 reasoning_parser;
     bool                              extracting_reasoning = false;
-    const analyze_reasoning *         reasoning            = nullptr;
     const analyze_content *           content              = nullptr;
 
     parser_build_context(common_chat_peg_builder & p, const generation_params & inputs);
@@ -308,22 +308,18 @@ struct analyze_tools : analyze_base {
 
   private:
     // Extract tool calling 'haystack' for further analysis and delegate further analysis based on format
-    void analyze_tool_calls(const analyze_reasoning & reasoning, bool supports_parallel_tool_calls);
+    void analyze_tool_calls(const analyze_reasoning & reasoning);
 
     // Analyze format based on position of function and argument name in needle
     void analyze_tool_call_format(const std::string &       haystack,
                                   const std::string &       fun_name_needle,
                                   const std::string &       arg_name_needle,
-                                  const analyze_reasoning & reasoning,
-                                  bool                      supports_parallel_tool_calls);
+                                  const analyze_reasoning & reasoning);
 
     // Analyze specifics of JSON native format (entire tool call is a JSON object)
     void analyze_tool_call_format_json_native(const std::string & clean_haystack,
                                               const std::string & fun_name_needle,
                                               const std::string & arg_name_needle);
-
-    // Check if parallel calls in JSON native format array wrapped or tag wrapped
-    void analyze_json_native_parallel_calls();
 
     // Analyze specifics of non-JSON native format (tags for function name or for function name and arguments)
     void analyze_tool_call_format_non_json(const std::string & clean_haystack,
@@ -357,13 +353,7 @@ struct analyze_tools : analyze_base {
     common_peg_parser build_tool_parser_json_native(parser_build_context & ctx) const;
     common_peg_parser build_tool_parser_tag_json(parser_build_context & ctx) const;
     common_peg_parser build_tool_parser_tag_tagged(parser_build_context & ctx) const;
-
-    // Shared helper: builds func_parser from open+call_id+args, handling atomic wrapping and close.
-    // atomic_peek: if present, used as the peek expression in the third atomicity branch.
-    common_peg_parser build_func_parser(common_chat_peg_builder & p, const std::string & name,
-                                        const common_peg_parser & call_id_section, bool have_call_id,
-                                        const common_peg_parser & args,
-                                        std::optional<common_peg_parser> atomic_peek) const;
+    common_peg_parser build_tool_parser_tag_gemma4_dict(parser_build_context & ctx) const;
 };
 
 // ============================================================================

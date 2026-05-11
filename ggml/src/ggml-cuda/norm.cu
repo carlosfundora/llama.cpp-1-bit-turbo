@@ -202,6 +202,59 @@ static __global__ void rms_norm_back_f32(
     }
 }
 
+// Wave32-optimized RMSNorm for RDNA2: 128 threads = 4 × Wave32
+// Uses manual warp-shuffle + shared-memory cross-warp reduce instead of
+// the generic block_reduce<> path (which expects extern shared mem).
+static __global__ void rms_norm_f32_wave32(
+        const float * x, float * dst, const int ncols,
+        const int64_t stride_row, const int64_t stride_channel,
+        const int64_t stride_sample, const float eps) {
+    const int nrows     = gridDim.x;
+    const int nchannels = gridDim.y;
+
+    const int row     = blockIdx.x;
+    const int channel = blockIdx.y;
+    const int sample  = blockIdx.z;
+    const int tid     = threadIdx.x; // [0, 128)
+
+    x   += sample*stride_sample + channel*stride_channel + row*stride_row;
+    dst += ((sample*nchannels + channel)*nrows + row)*ncols;
+
+    // Phase 1: accumulate sum of squares
+    float tmp = 0.0f;
+    for (int col = tid; col < ncols; col += 128) {
+        const float xi = x[col];
+        tmp += xi * xi;
+    }
+
+    // Phase 2: intra-warp reduce (Wave32 = 32 threads)
+    for (int offset = 16; offset > 0; offset >>= 1)
+        tmp += __shfl_xor_sync(0xffffffff, tmp, offset, 32);
+
+    // Cross-warp reduce via shared memory (4 warps of 32)
+    __shared__ float warp_sums[4];
+    __shared__ float s_variance;
+
+    const int warp_id = tid >> 5;
+    const int lane_id = tid & 31;
+
+    if (lane_id == 0) warp_sums[warp_id] = tmp;
+    __syncthreads();
+
+    if (warp_id == 0 && lane_id < 4) {
+        float val = warp_sums[lane_id];
+        for (int offset = 2; offset > 0; offset >>= 1)
+            val += __shfl_xor_sync(0xffffffff, val, offset, 32);
+        if (lane_id == 0)
+            s_variance = rsqrtf(val / ncols + eps);
+    }
+    __syncthreads();
+
+    // Phase 3: apply scale
+    for (int col = tid; col < ncols; col += 128)
+        dst[col] = s_variance * x[col];
+}
+
 // template <int block_size>
 // static __global__ void l2_norm_f32(const float * x, float * dst, const int ncols, const float eps) {
 //     const int row = blockIdx.x*blockDim.y + threadIdx.y;
@@ -298,7 +351,12 @@ static void rms_norm_f32_cuda(
         const float * x, float * dst, const int ncols, const int nrows, const int nchannels, const int nsamples,
         const int64_t stride_row, const int64_t stride_channel, const int64_t stride_sample, const float eps, cudaStream_t stream) {
     const dim3 blocks_num(nrows, nchannels, nsamples);
-    if (ncols < 1024) {
+    const int cc = ggml_cuda_info().devices[ggml_cuda_get_device()].cc;
+    if (GGML_CUDA_CC_IS_RDNA2(cc)) {
+        // 128 threads = 4 × Wave32: optimal occupancy on RDNA2 (gfx1030/gfx1031)
+        const dim3 block_dims(128, 1, 1);
+        rms_norm_f32_wave32<<<blocks_num, block_dims, 0, stream>>>(x, dst, ncols, stride_row, stride_channel, stride_sample, eps);
+    } else if (ncols < 1024) {
         const dim3 block_dims(256, 1, 1);
         rms_norm_f32<256, false><<<blocks_num, block_dims, block_dims.x > WARP_SIZE ? 32 * sizeof(float): 0, stream>>>(x, dst, ncols, stride_row, stride_channel, stride_sample, eps);
     } else {

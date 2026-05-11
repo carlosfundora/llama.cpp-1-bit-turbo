@@ -30,8 +30,18 @@ llm_build_qwen3::llm_build_qwen3(const llama_model & model, const llm_graph_para
         // self-attention
         {
             // compute Q and K and RoPE them
-            auto [Qcur, Kcur, Vcur] = build_qkv(model.layers[il], cur,
-                    n_embd_head, n_head, n_head_kv, il);
+            ggml_tensor * Qcur = build_lora_mm(model.layers[il].wq, cur, model.layers[il].wq_s);
+            cb(Qcur, "Qcur", il);
+
+            ggml_tensor * Kcur = build_lora_mm(model.layers[il].wk, cur, model.layers[il].wk_s);
+            cb(Kcur, "Kcur", il);
+
+            ggml_tensor * Vcur = build_lora_mm(model.layers[il].wv, cur, model.layers[il].wv_s);
+            cb(Vcur, "Vcur", il);
+
+            Qcur = ggml_reshape_3d(ctx0, Qcur, n_embd_head, n_head,    n_tokens);
+            Kcur = ggml_reshape_3d(ctx0, Kcur, n_embd_head, n_head_kv, n_tokens);
+            Vcur = ggml_reshape_3d(ctx0, Vcur, n_embd_head, n_head_kv, n_tokens);
 
             Qcur = build_norm(Qcur, model.layers[il].attn_q_norm, NULL, LLM_NORM_RMS, il);
             cb(Qcur, "Qcur_normed", il);
@@ -56,8 +66,11 @@ llm_build_qwen3::llm_build_qwen3(const llama_model & model, const llm_graph_para
             cb(Vcur, "Vcur", il);
 
             cur = build_attn(inp_attn,
-                    model.layers[il].wo, model.layers[il].wo_b, model.layers[il].wo_s,
+                    model.layers[il].wo, model.layers[il].bo,
                     Qcur, Kcur, Vcur, nullptr, nullptr, nullptr, 1.0f/sqrtf(float(n_embd_head)), il);
+            if (model.layers[il].wo_s) {
+                cur = ggml_mul(ctx0, cur, model.layers[il].wo_s);
+            }
         }
         if (il == n_layer - 1 && inp_out_ids) {
             cur   = ggml_get_rows(ctx0,   cur, inp_out_ids);
@@ -84,6 +97,20 @@ llm_build_qwen3::llm_build_qwen3(const llama_model & model, const llm_graph_para
 
         cur = build_cvec(cur, il);
         cb(cur, "l_out", il);
+
+        // EAGLE3: save layer output for hidden state extraction
+        if (eagle3 && !eagle3->extract_layer_indices.empty()) {
+            for (size_t ei = 0; ei < eagle3->extract_layer_indices.size(); ei++) {
+                if (eagle3->extract_layer_indices[ei] == il) {
+                    if (eagle3->extract_tensors.size() <= ei) {
+                        eagle3->extract_tensors.resize(ei + 1, nullptr);
+                    }
+                    ggml_set_output(cur);
+                    eagle3->extract_tensors[ei] = cur;
+                    break;
+                }
+            }
+        }
 
         // input for next layer
         inpL = cur;

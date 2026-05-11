@@ -700,13 +700,13 @@ namespace console {
         std::vector<std::string> entries;
         size_t viewing_idx = SIZE_MAX;
         std::string backup_line; // current line before viewing history
-        void add(std::string_view line) {
+        void add(const std::string & line) {
             if (line.empty()) {
                 return;
             }
             // avoid duplicates with the last entry
             if (entries.empty() || entries.back() != line) {
-                entries.emplace_back(line);
+                entries.push_back(line);
             }
             // also clear viewing state
             end_viewing();
@@ -1031,12 +1031,11 @@ namespace console {
 
         if (!end_of_stream && !line.empty()) {
             // remove the trailing newline for history storage
-            std::string_view hline = line;
             if (!line.empty() && line.back() == '\n') {
-                hline.remove_suffix(1);
+                line.pop_back();
             }
             // TODO: maybe support multiline history entries?
-            history.add(hline);
+            history.add(line);
         }
 
         fflush(out);

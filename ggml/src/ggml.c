@@ -9,6 +9,8 @@
 
 // FIXME: required here for quantization functions
 #include "ggml-quants.h"
+#include "ggml-planar-quant.h"
+#include "ggml-iso-quant.h"
 
 #ifdef GGML_USE_CPU_HBM
 #include <hbwmalloc.h>
@@ -52,16 +54,6 @@
 #endif
 
 #define UNUSED GGML_UNUSED
-
-uint64_t ggml_graph_next_uid(void) {
-#ifdef _MSC_VER
-    static volatile long long counter = 1;
-    return (uint64_t) _InterlockedIncrement64(&counter) - 1;
-#else
-    static uint64_t counter = 1;
-    return __atomic_fetch_add(&counter, 1, __ATOMIC_RELAXED);
-#endif
-}
 
 // Needed for ggml_fp32_to_bf16_row()
 #if defined(__AVX512BF16__)
@@ -668,6 +660,46 @@ static const struct ggml_type_traits type_traits[GGML_TYPE_COUNT] = {
         .is_quantized             = true,
         .to_float                 = (ggml_to_float_t) dequantize_row_q1_0,
         .from_float_ref           = (ggml_from_float_t) quantize_row_q1_0_ref,
+    },
+    [GGML_TYPE_Q1_0_g128] = {
+        .type_name                = "q1_0_g128",
+        .blck_size                = QK1_0_g128,
+        .type_size                = sizeof(block_q1_0_g128),
+        .is_quantized             = true,
+        .to_float                 = (ggml_to_float_t) dequantize_row_q1_0_g128,
+        .from_float_ref           = (ggml_from_float_t) quantize_row_q1_0_g128_ref,
+    },
+    [GGML_TYPE_PLANAR3_0] = {
+        .type_name                = "planar3",
+        .blck_size                = QK_PLANAR3,
+        .type_size                = sizeof(block_planar3_0),
+        .is_quantized             = true,
+        .to_float                 = (ggml_to_float_t) dequantize_row_planar3_0,
+        .from_float_ref           = (ggml_from_float_t) quantize_row_planar3_0_ref,
+    },
+    [GGML_TYPE_PLANAR4_0] = {
+        .type_name                = "planar4",
+        .blck_size                = QK_PLANAR4,
+        .type_size                = sizeof(block_planar4_0),
+        .is_quantized             = true,
+        .to_float                 = (ggml_to_float_t) dequantize_row_planar4_0,
+        .from_float_ref           = (ggml_from_float_t) quantize_row_planar4_0_ref,
+    },
+    [GGML_TYPE_ISO3_0] = {
+        .type_name                = "iso3",
+        .blck_size                = QK_ISO3,
+        .type_size                = sizeof(block_iso3_0),
+        .is_quantized             = true,
+        .to_float                 = (ggml_to_float_t) dequantize_row_iso3_0,
+        .from_float_ref           = (ggml_from_float_t) quantize_row_iso3_0_ref,
+    },
+    [GGML_TYPE_ISO4_0] = {
+        .type_name                = "iso4",
+        .blck_size                = QK_ISO4,
+        .type_size                = sizeof(block_iso4_0),
+        .is_quantized             = true,
+        .to_float                 = (ggml_to_float_t) dequantize_row_iso4_0,
+        .from_float_ref           = (ggml_from_float_t) quantize_row_iso4_0_ref,
     },
     [GGML_TYPE_Q4_0] = {
         .type_name                = "q4_0",
@@ -1403,6 +1435,7 @@ enum ggml_type ggml_ftype_to_ggml_type(enum ggml_ftype ftype) {
         case GGML_FTYPE_MOSTLY_Q4_0:          wtype = GGML_TYPE_Q4_0;  break;
         case GGML_FTYPE_MOSTLY_Q4_1:          wtype = GGML_TYPE_Q4_1;  break;
         case GGML_FTYPE_MOSTLY_Q1_0:          wtype = GGML_TYPE_Q1_0;  break;
+        case GGML_FTYPE_MOSTLY_Q1_0_g128:     wtype = GGML_TYPE_Q1_0_g128;  break;
         case GGML_FTYPE_MOSTLY_Q5_0:          wtype = GGML_TYPE_Q5_0;  break;
         case GGML_FTYPE_MOSTLY_Q5_1:          wtype = GGML_TYPE_Q5_1;  break;
         case GGML_FTYPE_MOSTLY_Q8_0:          wtype = GGML_TYPE_Q8_0;  break;
@@ -7108,7 +7141,6 @@ struct ggml_cgraph * ggml_new_graph_custom(struct ggml_context * ctx, size_t siz
         /*.use_counts   =*/ use_counts_ptr,
         /*.hash_table   =*/ { hash_size, hash_used, hash_keys_ptr },
         /*.order        =*/ GGML_CGRAPH_EVAL_ORDER_LEFT_TO_RIGHT,
-        /*.uid          =*/ 0,
     };
 
     ggml_hash_set_reset(&cgraph->visited_hash_set);
@@ -7136,7 +7168,6 @@ struct ggml_cgraph ggml_graph_view(struct ggml_cgraph * cgraph0, int i0, int i1)
         /*.use_counts       =*/ cgraph0->use_counts,
         /*.visited_hash_set =*/ cgraph0->visited_hash_set,
         /*.order            =*/ cgraph0->order,
-        /*.uid              =*/ 0
     };
 
     return cgraph;
@@ -7656,7 +7687,7 @@ size_t ggml_quantize_chunk(
                int64_t   nrows,
                int64_t   n_per_row,
            const float * imatrix) {
-    const int64_t n = nrows * n_per_row;
+    const int64_t n = (int64_t) nrows * n_per_row;
 
     if (ggml_quantize_requires_imatrix(type)) {
         GGML_ASSERT(imatrix != NULL);
@@ -7673,21 +7704,26 @@ size_t ggml_quantize_chunk(
     size_t result = 0;
 
     switch (type) {
-        case GGML_TYPE_Q1_0:    result = quantize_q1_0   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_Q4_0:    result = quantize_q4_0   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_Q4_1:    result = quantize_q4_1   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_Q5_0:    result = quantize_q5_0   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_Q5_1:    result = quantize_q5_1   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_Q8_0:    result = quantize_q8_0   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_MXFP4:   result = quantize_mxfp4  (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_NVFP4:   result = quantize_nvfp4  (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_Q2_K:    result = quantize_q2_K   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_Q3_K:    result = quantize_q3_K   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_Q4_K:    result = quantize_q4_K   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_Q5_K:    result = quantize_q5_K   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_Q6_K:    result = quantize_q6_K   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_TQ1_0:   result = quantize_tq1_0  (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
-        case GGML_TYPE_TQ2_0:   result = quantize_tq2_0  (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_Q1_0:    result = quantize_q1_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_Q1_0_g128: result = quantize_q1_0_g128(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_PLANAR3_0: result = quantize_planar3_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_PLANAR4_0: result = quantize_planar4_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_ISO3_0:    result = quantize_iso3_0   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_ISO4_0:    result = quantize_iso4_0   (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_Q4_0:    result = quantize_q4_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_Q4_1:    result = quantize_q4_1(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_Q5_0:    result = quantize_q5_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_Q5_1:    result = quantize_q5_1(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_Q8_0:    result = quantize_q8_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_MXFP4:   result = quantize_mxfp4(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_NVFP4:   result = quantize_nvfp4(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_Q2_K:    result = quantize_q2_K(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_Q3_K:    result = quantize_q3_K(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_Q4_K:    result = quantize_q4_K(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_Q5_K:    result = quantize_q5_K(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_Q6_K:    result = quantize_q6_K(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_TQ1_0:   result = quantize_tq1_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
+        case GGML_TYPE_TQ2_0:   result = quantize_tq2_0(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
         case GGML_TYPE_IQ2_XXS: result = quantize_iq2_xxs(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
         case GGML_TYPE_IQ2_XS:  result = quantize_iq2_xs (src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
         case GGML_TYPE_IQ3_XXS: result = quantize_iq3_xxs(src + start, (char *) dst + start_row * row_size, nrows, n_per_row, imatrix); break;
@@ -7752,9 +7788,9 @@ struct ggml_threadpool_params ggml_threadpool_params_default(int n_threads) {
 }
 
 bool ggml_threadpool_params_match(const struct ggml_threadpool_params * p0, const struct ggml_threadpool_params * p1) {
-    if (p0->n_threads  != p1->n_threads  ) return false;
-    if (p0->prio       != p1->prio       ) return false;
-    if (p0->poll       != p1->poll       ) return false;
-    if (p0->strict_cpu != p1->strict_cpu ) return false;
+    if (p0->n_threads      != p1->n_threads  )    return false;
+    if (p0->prio           != p1->prio       )    return false;
+    if (p0->poll           != p1->poll       )    return false;
+    if (p0->strict_cpu     != p1->strict_cpu )    return false;
     return memcmp(p0->cpumask, p1->cpumask, GGML_MAX_N_THREADS) == 0;
 }

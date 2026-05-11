@@ -116,7 +116,6 @@ struct llama_hparams {
     float    rope_freq_base_train_swa  = 10000.0f;
     float    rope_freq_scale_train;
     float    rope_freq_scale_train_swa = 1.0f;
-    float    rope_scaling_alpha        = 0.0f;  // NTK-aware alpha for XDRoPE
 
     uint32_t n_ctx_orig_yarn;
     float    rope_yarn_log_mul = 0.0f;
@@ -195,6 +194,11 @@ struct llama_hparams {
     uint32_t dense_2_feat_out = 0;  // out_features of the 2_Dense
     uint32_t dense_3_feat_in  = 0;  // in_features of the 3_Dense
     uint32_t dense_3_feat_out = 0;  // out_features of the 3_Dense
+
+    // EAGLE3 speculative decode
+    std::array<int, 3> eagle3_extract_layers = {0, 0, 0};
+    uint32_t eagle3_target_hidden_size = 0;
+    bool     eagle3_norm_before_residual = false;
 
     // xIELU
     std::array<float, LLAMA_MAX_LAYERS> xielu_alpha_n;

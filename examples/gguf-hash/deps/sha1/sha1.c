@@ -292,4 +292,3 @@ void SHA1(
         SHA1Update(&ctx, (const unsigned char*)str + ii, 1);
     SHA1Final((unsigned char *)hash_out, &ctx);
 }
-

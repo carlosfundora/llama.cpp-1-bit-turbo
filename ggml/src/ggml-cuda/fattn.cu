@@ -75,17 +75,13 @@ static void ggml_cuda_flash_attn_ext_mma_f16_switch_ncols2(ggml_backend_cuda_con
             return;
         }
 
-        if constexpr (DKQ <= 256) {
-            if (use_gqa_opt && gqa_ratio % 2 == 0) {
-                ggml_cuda_flash_attn_ext_mma_f16_switch_ncols1<DKQ, DV, 2>(ctx, dst);
-                return;
-            }
-
-            ggml_cuda_flash_attn_ext_mma_f16_switch_ncols1<DKQ, DV, 1>(ctx, dst);
+        if (use_gqa_opt && gqa_ratio % 2 == 0) {
+            ggml_cuda_flash_attn_ext_mma_f16_switch_ncols1<DKQ, DV, 2>(ctx, dst);
             return;
-        } else {
-            GGML_ABORT("fatal error");
         }
+
+        ggml_cuda_flash_attn_ext_mma_f16_switch_ncols1<DKQ, DV, 1>(ctx, dst);
+        return;
     }
 
     if (use_gqa_opt && gqa_ratio > 4) {
@@ -98,16 +94,12 @@ static void ggml_cuda_flash_attn_ext_mma_f16_switch_ncols2(ggml_backend_cuda_con
         return;
     }
 
-    if constexpr (DKQ <= 256) {
-        if (use_gqa_opt && gqa_ratio > 1) {
-            ggml_cuda_flash_attn_ext_mma_f16_switch_ncols1<DKQ, DV, 2>(ctx, dst);
-            return;
-        }
-
-        ggml_cuda_flash_attn_ext_mma_f16_switch_ncols1<DKQ, DV, 1>(ctx, dst);
-    } else {
-        GGML_ABORT("fatal error");
+    if (use_gqa_opt && gqa_ratio > 1) {
+        ggml_cuda_flash_attn_ext_mma_f16_switch_ncols1<DKQ, DV, 2>(ctx, dst);
+        return;
     }
+
+    ggml_cuda_flash_attn_ext_mma_f16_switch_ncols1<DKQ, DV, 1>(ctx, dst);
 }
 
 static void ggml_cuda_flash_attn_ext_mma_f16(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
@@ -292,6 +284,12 @@ static void ggml_cuda_flash_attn_ext_vec(ggml_backend_cuda_context & ctx, ggml_t
     FATTN_VEC_CASES_ALL_D(GGML_TYPE_BF16, GGML_TYPE_BF16)
 #endif // GGML_CUDA_FA_ALL_QUANTS
 
+    // RotorQuant: F16 K + quantized V (always available)
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_F16, GGML_TYPE_PLANAR3_0)
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_F16, GGML_TYPE_PLANAR4_0)
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_F16, GGML_TYPE_ISO3_0)
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_F16, GGML_TYPE_ISO4_0)
+
     GGML_ABORT("fatal error");
 }
 
@@ -374,7 +372,12 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
 
 #ifndef GGML_CUDA_FA_ALL_QUANTS
     if (K->type != V->type) {
-        return BEST_FATTN_KERNEL_NONE;
+        // Allow F16 K with RotorQuant V types (always compiled)
+        const bool rotorquant_v = (V->type == GGML_TYPE_PLANAR3_0 || V->type == GGML_TYPE_PLANAR4_0 ||
+                                   V->type == GGML_TYPE_ISO3_0    || V->type == GGML_TYPE_ISO4_0);
+        if (!(rotorquant_v && (K->type == GGML_TYPE_F16 || K->type == GGML_TYPE_F32))) {
+            return BEST_FATTN_KERNEL_NONE;
+        }
     }
 #endif // GGML_CUDA_FA_ALL_QUANTS
 
@@ -490,6 +493,12 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
 
     // If there are no tensor cores available, use the generic tile kernel:
     if (can_use_vector_kernel) {
+        if (GGML_CUDA_CC_IS_RDNA2(cc) && Q->ne[1] <= 4) {
+            // RDNA2 benefits significantly from the vector kernel for small decode batches,
+            // even if GQA applies, as the fallback tile kernel is bandwidth constrained and slow.
+            return BEST_FATTN_KERNEL_VEC;
+        }
+
         if (!ggml_is_quantized(K->type) && !ggml_is_quantized(V->type)) {
             if (Q->ne[1] == 1) {
                 if (!gqa_opt_applies) {

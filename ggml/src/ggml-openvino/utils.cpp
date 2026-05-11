@@ -81,8 +81,8 @@ ov::Tensor create_ov_output_tensor(std::shared_ptr<GgmlOvDecoder> ggml_decoder,
 enum ggml_status ov_graph_compute_dynamic(ggml_cgraph * cgraph, std::shared_ptr<ov_runtime_context> r_ctx) {
     auto & core = ov_singleton_core();
     const auto & config = ggml_openvino_get_compile_config();
-    const auto & device = r_ctx->device;
-    const auto & stateful = r_ctx->stateful;
+    auto device = r_ctx->device;
+    bool stateful = r_ctx->stateful;
     static auto is_static = false;
 
     if (is_naive(cgraph)) {
@@ -106,26 +106,14 @@ enum ggml_status ov_graph_compute_dynamic(ggml_cgraph * cgraph, std::shared_ptr<
     int64_t infer_end_time;
 
     {
-        std::shared_ptr<decoder_runtime_ctx> entry;
+        std::lock_guard<std::mutex> lock(r_ctx->ov_compute_mutex);
+
+        auto it = r_ctx->decoder_cache.find(key);
+
+        cache_hit = it != r_ctx->decoder_cache.end();
         ModelParams old_m_params;
-
-        {
-            std::lock_guard<std::mutex> map_lock(r_ctx->ctx_mutex);
-            auto it = r_ctx->decoder_cache.find(key);
-            cache_hit = it != r_ctx->decoder_cache.end();
-            if (cache_hit) {
-                entry = it->second;
-            } else {
-                auto mutex = std::make_shared<std::mutex>();
-                entry = std::make_shared<decoder_runtime_ctx>(mutex);
-                r_ctx->decoder_cache[key] = entry;
-            }
-        }
-
-        std::lock_guard<std::mutex> lock(*(entry->mutex));
-
         if (cache_hit) {
-            ggml_decoder = entry->ptr;
+            ggml_decoder = it->second;
             old_m_params = ggml_decoder->get_model_params();
             cache_hit = old_m_params.can_reuse_dynamically(m_params);
         }
@@ -138,10 +126,7 @@ enum ggml_status ov_graph_compute_dynamic(ggml_cgraph * cgraph, std::shared_ptr<
                 ggml_decoder->update_io(cgraph);
             }
             ggml_decoder->add_extra_inputs();
-            {
-                std::lock_guard<std::mutex> map_lock(r_ctx->ctx_mutex);
-                infer_request = r_ctx->infer_request_cache.at(key);
-            }
+            infer_request = r_ctx->infer_request_cache.at(key);
 
             if (stateful) {
                 const auto * inp_pos = get_inp_pos_tensor(cgraph);
@@ -185,10 +170,7 @@ enum ggml_status ov_graph_compute_dynamic(ggml_cgraph * cgraph, std::shared_ptr<
             conversion_end_time = decoder_end_time;
             compile_end_time = decoder_end_time;
         } else {
-            {
-                std::lock_guard<std::mutex> map_lock(r_ctx->ctx_mutex);
-                r_ctx->infer_request_cache.erase(key);
-            }
+            r_ctx->infer_request_cache.erase(key);
 
             std::shared_ptr<ov::Model> model;
             auto model_weights = GgmlOvDecoder::create_weight_nodes(cgraph);
@@ -217,7 +199,8 @@ enum ggml_status ov_graph_compute_dynamic(ggml_cgraph * cgraph, std::shared_ptr<
             }
             compile_end_time = ggml_time_us();
             infer_request = std::make_shared<ov::InferRequest>(compiled_model.create_infer_request());
-            entry->ptr = ggml_decoder;
+            r_ctx->infer_request_cache[key] = infer_request;
+            r_ctx->decoder_cache[key] = ggml_decoder;
 
             std::vector<std::string> ov_input_names;
             std::vector<std::string> ov_output_names;
@@ -227,13 +210,8 @@ enum ggml_status ov_graph_compute_dynamic(ggml_cgraph * cgraph, std::shared_ptr<
             for (const auto & ov_output : model->get_results()) {
                 ov_output_names.push_back(ov_output->get_friendly_name());
             }
-
-            {
-                std::lock_guard<std::mutex> map_lock(r_ctx->ctx_mutex);
-                r_ctx->infer_request_cache[key] = infer_request;
-                r_ctx->ov_input_names_cache[key] = std::move(ov_input_names);
-                r_ctx->ov_output_names_cache[key] = std::move(ov_output_names);
-            }
+            r_ctx->ov_input_names_cache[key] = std::move(ov_input_names);
+            r_ctx->ov_output_names_cache[key] = std::move(ov_output_names);
 
             if (stateful) {
                 const auto * inp_pos = get_inp_pos_tensor(cgraph);
@@ -246,13 +224,8 @@ enum ggml_status ov_graph_compute_dynamic(ggml_cgraph * cgraph, std::shared_ptr<
             }
         }
 
-        std::vector<std::string> ov_input_names;
-        std::vector<std::string> ov_output_names;
-        {
-            std::lock_guard<std::mutex> map_lock(r_ctx->ctx_mutex);
-            ov_input_names = r_ctx->ov_input_names_cache[key];
-            ov_output_names = r_ctx->ov_output_names_cache[key];
-        }
+        auto ov_input_names = r_ctx->ov_input_names_cache[key];
+        auto ov_output_names = r_ctx->ov_output_names_cache[key];
 
         for (size_t i = 0; i < ov_input_names.size(); i++) {
             auto param_name = ov_input_names[i];
@@ -333,26 +306,12 @@ enum ggml_status ov_graph_compute_static(ggml_cgraph * cgraph, std::shared_ptr<o
     int64_t compile_end_time;
     int64_t infer_end_time;
 
-    std::shared_ptr<decoder_runtime_ctx> entry;
+    auto it = r_ctx->decoder_cache.find(key);
+
+    cache_hit = it != r_ctx->decoder_cache.end();
     ModelParams old_m_params;
-
-    {
-        std::lock_guard<std::mutex> map_lock(r_ctx->ctx_mutex);
-        auto it = r_ctx->decoder_cache.find(key);
-        cache_hit = it != r_ctx->decoder_cache.end();
-        if (cache_hit) {
-            entry = it->second;
-        } else {
-            auto mutex = std::make_shared<std::mutex>();
-            entry = std::make_shared<decoder_runtime_ctx>(mutex);
-            r_ctx->decoder_cache[key] = entry;
-        }
-    }
-
-    std::lock_guard<std::mutex> lock(*(entry->mutex));
-
     if (cache_hit) {
-        ggml_decoder = entry->ptr;
+        ggml_decoder = it->second;
         old_m_params = ggml_decoder->get_model_params();
         cache_hit = old_m_params.can_reuse_statically(m_params);
     }
@@ -366,21 +325,14 @@ enum ggml_status ov_graph_compute_static(ggml_cgraph * cgraph, std::shared_ptr<o
             ggml_decoder->update_io(cgraph);
         }
         ggml_decoder->add_extra_inputs();
-        {
-            std::lock_guard<std::mutex> map_lock(r_ctx->ctx_mutex);
-            infer_request =
-                is_prefill ? r_ctx->infer_request_cache_prefill.at(key) : r_ctx->infer_request_cache.at(key);
-        }
+        infer_request = is_prefill ? r_ctx->infer_request_cache_prefill.at(key) : r_ctx->infer_request_cache.at(key);
 
         decoder_end_time = ggml_time_us();
         conversion_end_time = decoder_end_time;
         compile_end_time = decoder_end_time;
     } else {
-        {
-            std::lock_guard<std::mutex> map_lock(r_ctx->ctx_mutex);
-            r_ctx->infer_request_cache.erase(key);
-            r_ctx->infer_request_cache_prefill.erase(key);
-        }
+        r_ctx->infer_request_cache.erase(key);
+        r_ctx->infer_request_cache_prefill.erase(key);
 
         std::shared_ptr<ov::Model> model;
         auto model_weights = GgmlOvDecoder::create_weight_nodes(cgraph);
@@ -420,14 +372,16 @@ enum ggml_status ov_graph_compute_static(ggml_cgraph * cgraph, std::shared_ptr<o
             compiled_model_decode = core.compile_model(model_decode, device, config);
         }
 
-        auto infer_request_prefill = std::make_shared<ov::InferRequest>(compiled_model_prefill.create_infer_request());
-        auto infer_request_decode = std::make_shared<ov::InferRequest>(compiled_model_decode.create_infer_request());
+        r_ctx->infer_request_cache_prefill[key] =
+            std::make_shared<ov::InferRequest>(compiled_model_prefill.create_infer_request());
+        r_ctx->infer_request_cache[key] =
+            std::make_shared<ov::InferRequest>(compiled_model_decode.create_infer_request());
         compile_end_time = ggml_time_us();
 
         model = is_prefill ? model_prefill : model_decode;
         ggml_decoder = is_prefill ? ggml_decoder_prefill : ggml_decoder_decode;
-        infer_request = is_prefill ? infer_request_prefill : infer_request_decode;
-        entry->ptr = ggml_decoder;
+        infer_request = is_prefill ? r_ctx->infer_request_cache_prefill[key] : r_ctx->infer_request_cache[key];
+        r_ctx->decoder_cache[key] = ggml_decoder;
 
         std::vector<std::string> ov_input_names;
         std::vector<std::string> ov_output_names;
@@ -437,29 +391,18 @@ enum ggml_status ov_graph_compute_static(ggml_cgraph * cgraph, std::shared_ptr<o
         for (const auto & ov_output : model->get_results()) {
             ov_output_names.push_back(ov_output->get_friendly_name());
         }
-
-        {
-            std::lock_guard<std::mutex> map_lock(r_ctx->ctx_mutex);
-            r_ctx->infer_request_cache_prefill[key] = infer_request_prefill;
-            r_ctx->infer_request_cache[key] = infer_request_decode;
-            r_ctx->ov_input_names_cache[key] = std::move(ov_input_names);
-            r_ctx->ov_output_names_cache[key] = std::move(ov_output_names);
-        }
+        r_ctx->ov_input_names_cache[key] = std::move(ov_input_names);
+        r_ctx->ov_output_names_cache[key] = std::move(ov_output_names);
     }
 
-    std::vector<std::string> ov_input_names_local;
-    std::vector<std::string> ov_output_names_local;
-    {
-        std::lock_guard<std::mutex> map_lock(r_ctx->ctx_mutex);
-        ov_input_names_local = r_ctx->ov_input_names_cache[key];
-        ov_output_names_local = r_ctx->ov_output_names_cache[key];
-    }
+    auto ov_input_names = r_ctx->ov_input_names_cache[key];
+    auto ov_output_names = r_ctx->ov_output_names_cache[key];
 
     if (is_prefill) {
         auto inp_len = inp_pos->ne[0];
         for (int chunk_index = 0; chunk_index * prefill_chunk_size < inp_len; chunk_index++) {
-            for (size_t i = 0; i < ov_input_names_local.size(); i++) {
-                auto param_name = ov_input_names_local[i];
+            for (size_t i = 0; i < ov_input_names.size(); i++) {
+                auto param_name = ov_input_names[i];
                 auto input_tensor = get_ov_input_tensor_static_prefill(ggml_decoder, param_name, chunk_index);
                 infer_request->set_input_tensor(i, input_tensor);
 
@@ -469,8 +412,8 @@ enum ggml_status ov_graph_compute_static(ggml_cgraph * cgraph, std::shared_ptr<o
                 }
             }
 
-            for (size_t i = 0; i < ov_output_names_local.size(); i++) {
-                auto * ggml_tensor = ggml_decoder->get_model_outputs().at(ov_output_names_local[i]);
+            for (size_t i = 0; i < ov_output_names.size(); i++) {
+                auto * ggml_tensor = ggml_decoder->get_model_outputs().at(ov_output_names[i]);
                 auto output_tensor = create_ov_output_tensor(ggml_decoder, infer_request, i, ggml_tensor);
                 infer_request->set_output_tensor(i, output_tensor);
             }
@@ -478,16 +421,16 @@ enum ggml_status ov_graph_compute_static(ggml_cgraph * cgraph, std::shared_ptr<o
             infer_request->infer();
 
             if (getenv("GGML_OPENVINO_DEBUG_OUTPUT")) {
-                for (size_t i = 0; i < ov_output_names_local.size(); i++) {
+                for (size_t i = 0; i < ov_output_names.size(); i++) {
                     const auto output_tensor = infer_request->get_output_tensor(i);
-                    print_output_tensor_info(ov_output_names_local[i], output_tensor, output_tensor.data());
+                    print_output_tensor_info(ov_output_names[i], output_tensor, output_tensor.data());
                 }
             }
         }
         infer_end_time = ggml_time_us();
     } else {
-        for (size_t i = 0; i < ov_input_names_local.size(); i++) {
-            auto param_name = ov_input_names_local[i];
+        for (size_t i = 0; i < ov_input_names.size(); i++) {
+            auto param_name = ov_input_names[i];
             auto input_tensor = get_ov_input_tensor_static_decode(ggml_decoder, param_name);
             infer_request->set_input_tensor(i, input_tensor);
 
@@ -497,8 +440,8 @@ enum ggml_status ov_graph_compute_static(ggml_cgraph * cgraph, std::shared_ptr<o
             }
         }
 
-        for (size_t i = 0; i < ov_output_names_local.size(); i++) {
-            auto * ggml_tensor = ggml_decoder->get_model_outputs().at(ov_output_names_local[i]);
+        for (size_t i = 0; i < ov_output_names.size(); i++) {
+            auto * ggml_tensor = ggml_decoder->get_model_outputs().at(ov_output_names[i]);
             auto output_tensor = create_ov_output_tensor(ggml_decoder, infer_request, i, ggml_tensor);
             infer_request->set_output_tensor(i, output_tensor);
         }
@@ -507,9 +450,9 @@ enum ggml_status ov_graph_compute_static(ggml_cgraph * cgraph, std::shared_ptr<o
         infer_end_time = ggml_time_us();
 
         if (getenv("GGML_OPENVINO_DEBUG_OUTPUT")) {
-            for (size_t i = 0; i < ov_output_names_local.size(); i++) {
+            for (size_t i = 0; i < ov_output_names.size(); i++) {
                 const auto output_tensor = infer_request->get_output_tensor(i);
-                print_output_tensor_info(ov_output_names_local[i], output_tensor, output_tensor.data());
+                print_output_tensor_info(ov_output_names[i], output_tensor, output_tensor.data());
             }
         }
     }

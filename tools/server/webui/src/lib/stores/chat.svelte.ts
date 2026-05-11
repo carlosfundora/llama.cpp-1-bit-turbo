@@ -30,8 +30,7 @@ import {
 	findDescendantMessages,
 	findLeafNode,
 	findMessageById,
-	isAbortError,
-	generateConversationTitle
+	isAbortError
 } from '$lib/utils';
 import {
 	MAX_INACTIVE_CONVERSATION_STATES,
@@ -59,7 +58,6 @@ class ChatStore {
 	chatLoadingStates = new SvelteMap<string, boolean>();
 	chatStreamingStates = new SvelteMap<string, { response: string; messageId: string }>();
 	private abortControllers = new SvelteMap<string, AbortController>();
-	private preEncodeAbortController: AbortController | null = null;
 	private processingStates = new SvelteMap<string, ApiProcessingState | null>();
 	private conversationStateTimestamps = new SvelteMap<string, ConversationStateEntry>();
 	private activeConversationId = $state<string | null>(null);
@@ -464,9 +462,6 @@ class ChatStore {
 		const activeConv = conversationsStore.activeConversation;
 		if (activeConv && this.isChatLoadingInternal(activeConv.id)) return;
 
-		// Cancel any in-flight pre-encode request
-		this.cancelPreEncode();
-
 		// Consume MCP resource attachments - converts them to extras and clears the live store
 		const resourceExtras = mcpStore.consumeResourceAttachmentsAsExtras();
 		const allExtras = resourceExtras.length > 0 ? [...(extras || []), ...resourceExtras] : extras;
@@ -505,10 +500,7 @@ class ChatStore {
 				allExtras
 			);
 			if (isNewConversation && content)
-				await conversationsStore.updateConversationName(
-					currentConv.id,
-					generateConversationTitle(content, Boolean(config().titleGenerationUseFirstLine))
-				);
+				await conversationsStore.updateConversationName(currentConv.id, content.trim());
 			const assistantMessage = await this.createAssistantMessage(userMessage.id);
 			conversationsStore.addMessageToActive(assistantMessage);
 			await this.streamChatCompletion(
@@ -732,16 +724,6 @@ class ChatStore {
 
 				if (onComplete) onComplete(streamedContent);
 				if (isRouterMode()) modelsStore.fetchRouterModels().catch(console.error);
-				// Pre-encode conversation in KV cache for faster next turn
-				if (config().preEncodeConversation) {
-					this.triggerPreEncode(
-						allMessages,
-						assistantMessage,
-						streamedContent,
-						effectiveModel,
-						!!config().excludeReasoningFromContext
-					);
-				}
 			},
 			onError: (error: Error) => {
 				this.setStreamingActive(false);
@@ -900,7 +882,7 @@ class ChatStore {
 			if (isFirstUserMessage && newContent.trim())
 				await conversationsStore.updateConversationTitleWithConfirmation(
 					activeConv.id,
-					generateConversationTitle(newContent, Boolean(config().titleGenerationUseFirstLine))
+					newContent.trim()
 				);
 			const messagesToRemove = conversationsStore.activeMessages.slice(messageIndex + 1);
 			for (const message of messagesToRemove) await DatabaseService.deleteMessage(message.id);
@@ -929,7 +911,6 @@ class ChatStore {
 	async regenerateMessage(messageId: string): Promise<void> {
 		const activeConv = conversationsStore.activeConversation;
 		if (!activeConv || this.isChatLoadingInternal(activeConv.id)) return;
-		this.cancelPreEncode();
 		const result = this.getMessageByIdWithRole(messageId, MessageRole.ASSISTANT);
 		if (!result) return;
 		const { index: messageIndex } = result;
@@ -959,7 +940,6 @@ class ChatStore {
 	async regenerateMessageWithBranching(messageId: string, modelOverride?: string): Promise<void> {
 		const activeConv = conversationsStore.activeConversation;
 		if (!activeConv || this.isChatLoadingInternal(activeConv.id)) return;
-		this.cancelPreEncode();
 		try {
 			const idx = conversationsStore.findMessageIndex(messageId);
 			if (idx === -1) return;
@@ -1321,7 +1301,7 @@ class ChatStore {
 			if (rootMessage && msg.parent === rootMessage.id && newContent.trim()) {
 				await conversationsStore.updateConversationTitleWithConfirmation(
 					activeConv.id,
-					generateConversationTitle(newContent, Boolean(config().titleGenerationUseFirstLine))
+					newContent.trim()
 				);
 			}
 
@@ -1395,7 +1375,7 @@ class ChatStore {
 			if (isFirstUserMessage && newContent.trim())
 				await conversationsStore.updateConversationTitleWithConfirmation(
 					activeConv.id,
-					generateConversationTitle(newContent, Boolean(config().titleGenerationUseFirstLine))
+					newContent.trim()
 				);
 			await conversationsStore.refreshActiveMessages();
 			if (msg.role === MessageRole.USER)
@@ -1630,47 +1610,12 @@ class ChatStore {
 
 		if (currentConfig.samplers) apiOptions.samplers = currentConfig.samplers;
 
-		apiOptions.backend_sampling = currentConfig.backend_sampling;
+		if (currentConfig.backend_sampling)
+			apiOptions.backend_sampling = currentConfig.backend_sampling;
 
 		if (currentConfig.custom) apiOptions.custom = currentConfig.custom;
 
 		return apiOptions;
-	}
-
-	private cancelPreEncode(): void {
-		if (this.preEncodeAbortController) {
-			this.preEncodeAbortController.abort();
-			this.preEncodeAbortController = null;
-		}
-	}
-
-	private async triggerPreEncode(
-		allMessages: DatabaseMessage[],
-		assistantMessage: DatabaseMessage,
-		assistantContent: string,
-		model?: string | null,
-		excludeReasoning?: boolean
-	): Promise<void> {
-		this.cancelPreEncode();
-		this.preEncodeAbortController = new AbortController();
-
-		const signal = this.preEncodeAbortController.signal;
-
-		try {
-			const allIdle = await ChatService.areAllSlotsIdle(model, signal);
-			if (!allIdle || signal.aborted) return;
-
-			const messagesWithAssistant: DatabaseMessage[] = [
-				...allMessages,
-				{ ...assistantMessage, content: assistantContent }
-			];
-
-			await ChatService.preEncode(messagesWithAssistant, model, excludeReasoning, signal);
-		} catch (err) {
-			if (!isAbortError(err)) {
-				console.warn('[ChatStore] Pre-encode failed:', err);
-			}
-		}
 	}
 }
 

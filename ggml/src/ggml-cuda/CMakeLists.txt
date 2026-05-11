@@ -120,7 +120,11 @@ if (CUDAToolkit_FOUND)
             template-instances/fattn-vec-instance-f16-f16.cu
             template-instances/fattn-vec-instance-q4_0-q4_0.cu
             template-instances/fattn-vec-instance-q8_0-q8_0.cu
-            template-instances/fattn-vec-instance-bf16-bf16.cu)
+            template-instances/fattn-vec-instance-bf16-bf16.cu
+            template-instances/fattn-vec-instance-f16-planar3_0.cu
+            template-instances/fattn-vec-instance-f16-planar4_0.cu
+            template-instances/fattn-vec-instance-f16-iso3_0.cu
+            template-instances/fattn-vec-instance-f16-iso4_0.cu)
     endif()
 
     ggml_add_backend_library(ggml-cuda
@@ -181,13 +185,15 @@ if (CUDAToolkit_FOUND)
         target_link_libraries(ggml-cuda PRIVATE CUDA::cuda_driver)
     endif()
 
-    if (GGML_CUDA_NCCL)
-        find_package(NCCL)
-        if (NCCL_FOUND)
-            add_compile_definitions(GGML_USE_NCCL)
-            target_link_libraries(ggml-cuda PRIVATE NCCL::NCCL)
+    if (GGML_TRITON)
+        # triton-loader.cu is auto-included via file(GLOB *.cu) above.
+        # Ensure triton_kernels AOT target runs before ggml-cuda is linked.
+        add_dependencies(ggml-cuda triton_kernels)
+        if (GGML_USE_HIP)
+            # HIP driver API is in the amdhip64 shared lib
+            target_link_libraries(ggml-cuda PRIVATE amdhip64)
         else()
-            message(STATUS "Warning: NCCL not found, performance for multiple CUDA GPUs will be suboptimal")
+            # CUDA driver already linked above (CUDA::cuda_driver)
         endif()
     endif()
 
