@@ -50,7 +50,7 @@ class ReaderField(NamedTuple):
     # Indexes into parts that we can call the actual data. For example
     # an array of strings will be populated with indexes to the actual
     # string data.
-    data: list[int] = [-1]
+    data: list[Any] = [-1]
 
     types: list[GGUFValueType] = []
 
@@ -62,32 +62,22 @@ class ReaderField(NamedTuple):
             if main_type == GGUFValueType.ARRAY:
                 sub_type = self.types[-1]
 
-                if sub_type == GGUFValueType.STRING:
-                    indices = self.data[index_or_slice]
-
-                    if isinstance(index_or_slice, int):
-                        return to_string(self.parts[indices]) # type: ignore
+                def resolve_indices(indices: Any) -> Any:
+                    if isinstance(indices, list):
+                        return [resolve_indices(i) for i in indices]
+                    if sub_type == GGUFValueType.STRING:
+                        return to_string(self.parts[indices])
                     else:
-                        return [to_string(self.parts[idx]) for idx in indices] # type: ignore
-                else:
-                    # FIXME: When/if _get_field_parts() support multi-dimensional arrays, this must do so too
+                        return self.parts[indices].tolist()[0]
 
-                    # Check if it's unsafe to perform slice optimization on data
-                    # if any(True for idx in self.data if len(self.parts[idx]) != 1):
-                    #     optim_slice = slice(None)
-                    # else:
-                    #     optim_slice = index_or_slice
-                    #     index_or_slice = slice(None)
+                selected_data = self.data[index_or_slice]
+                # If the slice returns a single integer (e.g. 1D array with int index)
+                # it's not a list, so we handle it directly
+                if not isinstance(selected_data, list):
+                    return resolve_indices(selected_data)
 
-                    # if isinstance(optim_slice, int):
-                    #     return self.parts[self.data[optim_slice]].tolist()[0]
-                    # else:
-                    #     return [pv for idx in self.data[optim_slice] for pv in self.parts[idx].tolist()][index_or_slice]
-
-                    if isinstance(index_or_slice, int):
-                        return self.parts[self.data[index_or_slice]].tolist()[0]
-                    else:
-                        return [pv for idx in self.data[index_or_slice] for pv in self.parts[idx].tolist()]
+                # If we have a list of indices, resolve each
+                return [resolve_indices(idx) for idx in selected_data]
 
             if main_type == GGUFValueType.STRING:
                 return to_string(self.parts[-1])
@@ -242,15 +232,28 @@ class GGUFReader:
             alen = self._get(offs, np.uint64)
             offs += int(alen.nbytes)
             aparts: list[npt.NDArray[Any]] = [raw_itype, alen]
-            data_idxs: list[int] = []
-            # FIXME: Handle multi-dimensional arrays properly instead of flattening
+            data_idxs: list[Any] = []
+
+            def offset_idxs(idxs: Any, offset: int) -> Any:
+                if isinstance(idxs, list):
+                    return [offset_idxs(i, offset) for i in idxs]
+                return idxs + offset
+
             for idx in range(alen[0]):
                 curr_size, curr_parts, curr_idxs, curr_types = self._get_field_parts(offs, raw_itype[0])
                 if idx == 0:
                     types += curr_types
                 idxs_offs = len(aparts)
                 aparts += curr_parts
-                data_idxs += (idx + idxs_offs for idx in curr_idxs)
+
+                processed = offset_idxs(curr_idxs, idxs_offs)
+                if GGUFValueType(raw_itype[0]) == GGUFValueType.ARRAY:
+                    data_idxs.append(processed)
+                else:
+                    # For non-arrays, curr_idxs is typically a list of 1 element (e.g. [0] or [1])
+                    # We want to flatten the innermost list so a 1D array is a simple list of ints
+                    data_idxs.extend(processed)
+
                 offs += curr_size
             return offs - orig_offs, aparts, data_idxs, types
         # We can't deal with this one.
@@ -297,11 +300,17 @@ class GGUFReader:
             idxs_offs = len(parts)
             field_size, field_parts, field_idxs, field_types = self._get_field_parts(offs, raw_kv_type[0])
             parts += field_parts
+
+            def offset_idxs(idxs: Any, offset: int) -> Any:
+                if isinstance(idxs, list):
+                    return [offset_idxs(i, offset) for i in idxs]
+                return idxs + offset
+
             self._push_field(ReaderField(
                 orig_offs,
                 str(bytes(kv_kdata), encoding = 'utf-8'),
                 parts,
-                [idx + idxs_offs for idx in field_idxs],
+                offset_idxs(field_idxs, idxs_offs),
                 field_types,
             ), skip_sum = True)
             offs += field_size

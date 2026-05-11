@@ -334,4 +334,3 @@ void ggml_compute_forward_xielu(const ggml_compute_params * params, ggml_tensor 
 
     unary_op_functor(params, dst, xielu_op_params);
 }
-

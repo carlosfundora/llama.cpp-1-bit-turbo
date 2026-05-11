@@ -232,6 +232,8 @@ set_tests_properties(test-thread-safety PROPERTIES FIXTURES_REQUIRED test-downlo
 
 llama_build_and_test(test-arg-parser.cpp)
 llama_build_and_test(test-rocm-hardening.cpp)
+llama_build_and_test(test-llama-kv-cells.cpp)
+target_include_directories(test-llama-kv-cells PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
 if (NOT LLAMA_SANITIZE_ADDRESS AND NOT GGML_SCHED_NO_REALLOC)
   # TODO: repair known memory leaks

@@ -1,3 +1,12 @@
+
+#if defined(_MSC_VER) && (defined(_M_AMD64) || defined(_M_IX86))
+#include <intrin.h>
+#define prefetch_for_read(addr, rw, locality) _mm_prefetch((const char *)(addr), _MM_HINT_T0)
+#elif defined(__GNUC__) || defined(__clang__)
+#define prefetch_for_read(addr, rw, locality) __builtin_prefetch(addr, rw, locality)
+#else
+#define prefetch_for_read(addr, rw, locality)
+#endif
 #include "ngram-mod.h"
 
 //
@@ -134,7 +143,7 @@ int common_ngram_mod::draft_rolling(const entry_t * ctx, int max_draft, entry_t 
         if (i + 1 < max_draft) {
             // Speculative prefetch: assume out[i] will be valid, pre-hash next
             const size_t next_idx = mask ? (h & mask) : (h % entries.size());
-            __builtin_prefetch(&entries[next_idx], 0, 1);
+            prefetch_for_read(&entries[next_idx], 0, 1);
         }
 
         tok = get_by_hash(h);
