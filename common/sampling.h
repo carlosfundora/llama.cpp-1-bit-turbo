@@ -89,6 +89,8 @@ uint32_t common_sampler_get_seed(const struct common_sampler * gsmpl);
 
 // helpers
 
+void common_params_sampling_init(const struct llama_model * model, struct common_params_sampling & sparams);
+
 // access the internal list of current candidate tokens
 // if do_sort == true, the candidates are guaranteed to be sorted afterwards (in descending order of probability)
 // the .sorted flag of the result indicates whether the returned candidates are sorted
