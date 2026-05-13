@@ -349,8 +349,7 @@ static handle_model_result common_params_handle_model(struct common_params_model
         auto download_result = common_download_model(model, bearer_token, opts);
 
         if (download_result.model_path.empty()) {
-            LOG_ERR("error: failed to download model from Hugging Face\n");
-            exit(1);
+            throw std::runtime_error("failed to download model from Hugging Face");
         }
 
         model.name = model.hf_repo;
@@ -371,8 +370,7 @@ static handle_model_result common_params_handle_model(struct common_params_model
         opts.offline = offline;
         auto download_result = common_download_model(model, bearer_token, opts);
         if (download_result.model_path.empty()) {
-            LOG_ERR("error: failed to download model from %s\n", model.url.c_str());
-            exit(1);
+            throw std::runtime_error("failed to download model from " + model.url);
         }
     }
 
