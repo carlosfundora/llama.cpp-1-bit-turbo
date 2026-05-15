@@ -1,38 +1,10 @@
 {
-  "results": [
-    {
-      "command": "./rusty/target/release/rusty",
-      "mean": 3.608525147740001,
-      "stddev": 0.04475858036662369,
-      "median": 3.60471186994,
-      "user": 13.4093689,
-      "system": 0.60415022,
-      "min": 3.5338089059400004,
-      "max": 3.7029181059400003,
-      "times": [
-        3.64684730594,
-        3.5704662319400002,
-        3.61317917694,
-        3.5338089059400004,
-        3.6055313619400002,
-        3.7029181059400003,
-        3.5955808789400003,
-        3.5925023899400004,
-        3.6038923779400003,
-        3.62052474194
-      ],
-      "exit_codes": [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0
-      ]
-    }
-  ]
+  "candidate": "scripts/compare-logprobs.py",
+  "implementation": "after",
+  "command": "./rusty/target/release/compare_logprobs compare dummy1.log dummy2.log output.md",
+  "timestamp": "2026-05-15T03:56:38.876853+00:00",
+  "iterations": 1,
+  "input_description": "Two 50,000 line JSON log files",
+  "duration_ms": 319.16,
+  "notes": "Testing the compare subcommand (Rust refactor cached result)"
 }

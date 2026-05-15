@@ -1,38 +1,10 @@
 {
-  "results": [
-    {
-      "command": "python3 scripts/verify-checksum-models.py",
-      "mean": 7.476928697859998,
-      "stddev": 0.1821690999618941,
-      "median": 7.39347078346,
-      "user": 6.809092819999999,
-      "system": 0.68733768,
-      "min": 7.31135106046,
-      "max": 7.8807217734599995,
-      "times": [
-        7.4912176194599995,
-        7.37938554646,
-        7.52034073546,
-        7.34880573146,
-        7.31135106046,
-        7.8807217734599995,
-        7.7007187754599995,
-        7.3697976144599995,
-        7.35939210146,
-        7.4075560204599995
-      ],
-      "exit_codes": [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0
-      ]
-    }
-  ]
+  "candidate": "scripts/compare-logprobs.py",
+  "implementation": "before",
+  "command": "python3 scripts/compare-logprobs.py compare dummy1.log dummy2.log output.md",
+  "timestamp": "2026-05-15T03:56:38.560842+00:00",
+  "iterations": 1,
+  "input_description": "Two 50,000 line JSON log files",
+  "duration_ms": 1418.88,
+  "notes": "Testing the compare subcommand (cached result from unpatched codebase)"
 }

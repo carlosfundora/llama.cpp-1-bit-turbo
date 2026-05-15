@@ -1,6 +1,7 @@
 import argparse
 import requests
 import json
+import sys
 from pathlib import Path
 import logging
 
@@ -270,7 +271,22 @@ def main():
         logger.info(f"Using {len(input_words)} words")
         dump_logits(args.endpoint, args.output, input_words, pattern, args.api_key)
     elif args.verb == "compare":
-        compare_logits(args.input1, args.input2, args.output)
+        import subprocess
+        import os
+        import platform
+        llama_path = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+        rusty_dir = os.path.join(llama_path, "rusty")
+        bin_name = "compare_logprobs.exe" if platform.system() == "Windows" else "compare_logprobs"
+        rusty_bin = os.path.join(rusty_dir, "target", "release", bin_name)
+        if not os.path.exists(rusty_bin):
+            logger.info("Rust binary not found. Compiling compare_logprobs...")
+            subprocess.run(["cargo", "build", "--release", "--bin", "compare_logprobs", "--manifest-path", os.path.join(rusty_dir, "Cargo.toml")], check=True, cwd=rusty_dir)
+        try:
+            subprocess.run([rusty_bin, "compare", args.input1, args.input2, args.output], check=True)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Rusty binary failed: {e}")
+            sys.exit(e.returncode)
+        return
     else:
         raise ValueError(f"Unknown verb: {args.verb}")
 
