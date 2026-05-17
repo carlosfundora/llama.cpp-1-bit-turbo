@@ -39,7 +39,7 @@ export class AudioRecorder {
 		if (!isAudioCaptureEnabled()) {
 			throw new Error(
 				'Audio capture is disabled. To enable: set window.__AUDIO_CAPTURE_ENABLED = true in browser console. ' +
-				'Otherwise use DEMERZEL audio_orchestrator_v3 endpoints (port 12020).'
+					'Otherwise use DEMERZEL audio_orchestrator_v3 endpoints (port 12020).'
 			);
 		}
 
