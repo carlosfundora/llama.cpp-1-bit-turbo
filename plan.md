@@ -1,7 +1,8 @@
-Wait, `__builtin_prefetch` is undefined in `common/ngram-mod.cpp`!
-"error C3861: '__builtin_prefetch': identifier not found [D:\a\llama.cpp-1-bit-turbo\llama.cpp-1-bit-turbo\build\common\common.vcxproj]"
-Wait! "To maintain cross-platform C/C++ compatibility, particularly for Windows MSVC, use `<intrin.h>` and `_mm_prefetch` instead of compiler-specific intrinsics like `__builtin_prefetch`."
-This is in memory!
-"To maintain cross-platform C/C++ compatibility, particularly for Windows MSVC, use `<intrin.h>` and `_mm_prefetch` instead of compiler-specific intrinsics like `__builtin_prefetch`."
-
-Let's look at `common/ngram-mod.cpp` where `__builtin_prefetch` is used.
+Plan:
+1. Open `src/llama-kv-cells.h`
+2. Add `_used_count`, `_used_min`, `_used_max_p1` private fields and initialize them.
+3. Add `used_insert(uint32_t i)` and `used_erase(uint32_t i)` private methods.
+4. Replace `std::set<uint32_t> used;` with these fields.
+5. In `clear()`, `reset()`, reset these fields instead of `used.clear()`.
+6. Update `used.insert()` and `used.erase()` calls across the file.
+7. Make sure `get_used()`, `used_min()`, and `used_max_p1()` return the values of `_used_count`, `_used_min`, and `_used_max_p1`.
