@@ -32,6 +32,7 @@ class llama_kv_cells {
 public:
     void reset() {
         for (uint32_t i = 0; i < pos.size(); ++i) {
+            _is_used[i] = false;
             pos[i]   = -1;
             ext[i].reset();
             shift[i] =  0;
@@ -40,7 +41,9 @@ public:
 
         has_shift = false;
 
-        used.clear();
+        _used_count = 0;
+        _used_min   = UINT32_MAX;
+        _used_max_p1 = 0;
 
         for (uint32_t s = 0; s < LLAMA_MAX_SEQ; ++s) {
             seq_pos[s].clear();
@@ -60,6 +63,7 @@ public:
     }
 
     void resize(uint32_t n) {
+        _is_used.resize(n, false);
         pos.resize(n);
         ext.resize(n);
         shift.resize(n);
@@ -76,19 +80,19 @@ public:
     }
 
     uint32_t get_used() const {
-        return used.size();
+        return _used_count;
     }
 
     // the index of the first cell that is used
     // return 0 if no cells are used
     uint32_t used_min() const {
-        return used.empty() ? 0 : *used.begin();
+        return _used_count == 0 ? 0 : _used_min;
     }
 
     // the index of the last cell that is used + 1
     // return 0 if no cells are used
     uint32_t used_max_p1() const {
-        return used.empty() ? 0 : *used.rbegin() + 1;
+        return _used_count == 0 ? 0 : _used_max_p1;
     }
 
     bool get_has_shift() const {
@@ -112,7 +116,7 @@ public:
     //    seq  [isrc].reset();
 
     //    used.erase (isrc);
-    //    used.insert(idst);
+    //    used_insert(idst);
     //}
 
     // copy the state of cells [i, i + n) (used for save/restore the state of the cells)
@@ -163,11 +167,11 @@ public:
             const auto idx = i + j;
 
             if (pos[idx] == -1 && other.pos[j] != -1) {
-                used.insert(i + j);
+                used_insert(i + j);
             }
 
             if (pos[idx] != -1 && other.pos[j] == -1) {
-                used.erase(i + j);
+                used_erase(i + j);
             }
 
             if (pos[idx] != -1) {
@@ -194,11 +198,11 @@ public:
             const auto idx = idxs[j];
 
             if (pos[idx] == -1 && other.pos[j] != -1) {
-                used.insert(idx);
+                used_insert(idx);
             }
 
             if (pos[idx] != -1 && other.pos[j] == -1) {
-                used.erase(idx);
+                used_erase(idx);
             }
 
             if (pos[idx] != -1) {
@@ -229,7 +233,7 @@ public:
         ext[i].reset();
         shift[i] = 0;
 
-        used.erase(i);
+        used_erase(i);
     }
 
     // note: call only if the cell has seq_id
@@ -248,7 +252,7 @@ public:
             ext[i].reset();
             shift[i] = 0;
 
-            used.erase(i);
+            used_erase(i);
 
             return true;
         }
@@ -278,7 +282,7 @@ public:
             ext[i].reset();
             shift[i] = 0;
 
-            used.erase(i);
+            used_erase(i);
 
             return true;
         }
@@ -398,7 +402,7 @@ public:
 
         pos[i] = p;
 
-        used.insert(i);
+        used_insert(i);
     }
 
     void ext_set(uint32_t i, llama_kv_cell_ext p) {
@@ -425,7 +429,7 @@ public:
             pos[i] = -1;
             shift[i] = 0;
 
-            used.erase(i);
+            used_erase(i);
 
             return true;
         }
@@ -458,7 +462,39 @@ private:
     bool has_shift = false;
 
     // set of indices of used cells (i.e. pos[i] != -1, allowed to not have any seq_id)
-    std::set<uint32_t> used;
+    uint32_t _used_count = 0;
+    uint32_t _used_min   = UINT32_MAX;
+    uint32_t _used_max_p1 = 0;
+    std::vector<bool> _is_used;
+
+    void used_insert(uint32_t i) {
+        if (_is_used[i]) return;
+        _is_used[i] = true;
+        _used_count++;
+        if (i < _used_min) _used_min = i;
+        if (i + 1 > _used_max_p1) _used_max_p1 = i + 1;
+    }
+
+    void used_erase(uint32_t i) {
+        if (!_is_used[i]) return;
+        _is_used[i] = false;
+        _used_count--;
+        if (_used_count == 0) {
+            _used_min   = UINT32_MAX;
+            _used_max_p1 = 0;
+        } else {
+            if (i == _used_min) {
+                while (_used_min < pos.size() && !_is_used[_used_min]) {
+                    _used_min++;
+                }
+            }
+            if (i + 1 == _used_max_p1) {
+                while (_used_max_p1 > 0 && !_is_used[_used_max_p1 - 1]) {
+                    _used_max_p1--;
+                }
+            }
+        }
+    }
 
     std::vector<llama_pos> pos;
 

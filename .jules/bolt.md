@@ -1,0 +1,3 @@
+## 2024-05-24 - Avoid std::set overhead in llama_kv_cells
+**Learning:** `std::set` uses a red-black tree, leading to allocation overhead. For tracking KV cell usage in `llama_kv_cells` (`std::set<uint32_t> used`), this is inefficient during `llama_kv_cache::find_slot`. The memory explicitly states to track cell usage using scalar variables (`_used_count`, `_used_min`, `_used_max_p1`) and the `pos` array (`pos[i] != -1`) instead of `std::set`.
+**Action:** Replace `std::set<uint32_t> used` in `llama_kv_cells` with scalar variables tracking count, min, and max position. When querying min/max, update the scalars sequentially if elements are removed at the boundaries.
