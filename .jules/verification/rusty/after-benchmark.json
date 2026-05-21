@@ -1,10 +1,9 @@
 {
-  "candidate": "scripts/compare-logprobs.py",
+  "candidate": "scripts/get_chat_template.py",
   "implementation": "after",
-  "command": "./rusty/target/release/compare_logprobs compare dummy1.log dummy2.log output.md",
-  "timestamp": "2026-05-15T03:56:38.876853+00:00",
+  "command": "rusty/target/release/get_chat_template microsoft/Phi-3.5-mini-instruct",
+  "timestamp": "2026-05-21T23:40:27+00:00",
   "iterations": 1,
-  "input_description": "Two 50,000 line JSON log files",
-  "duration_ms": 319.16,
-  "notes": "Testing the compare subcommand (Rust refactor cached result)"
+  "input_description": "microsoft/Phi-3.5-mini-instruct template",
+  "duration_ms": 224
 }

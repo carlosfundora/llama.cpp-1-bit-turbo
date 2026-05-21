@@ -1,0 +1,43 @@
+## Rusty Rust Refactor: get_chat_template
+
+### Selected Candidate
+- `scripts/get_chat_template.py`
+
+### Why it was selected
+It meets the pure Rust refactor criteria perfectly. It handles file parsing/fetching logic that frequently delays testing workflows or user experimentation. A compiled Rust binary eliminates optional Python dependencies (`huggingface_hub`, `requests`), removes Python execution overhead, and drops startup times significantly.
+
+### What changed
+Created a new Rust binary `rusty/src/bin/get_chat_template.rs` using `reqwest` and `serde_json` to fetch and parse tokenizer configurations. Updated `scripts/get_chat_template.py` to act as a fallback wrapper that compiles and delegates to the new Rust binary, preserving existing Bash tooling.
+
+### Benchmark Before
+- Command: `python scripts/get_chat_template.py microsoft/Phi-3.5-mini-instruct`
+- Duration: 705 ms
+
+### Benchmark After
+- Command: `rusty/target/release/get_chat_template microsoft/Phi-3.5-mini-instruct`
+- Duration: 224 ms
+
+### Benchmark Delta
+- Time reduced by 68.2%, approximately 3x faster response time.
+
+### Tests Run
+- Compiled `rusty` crate (`cargo build --release`).
+- Verified python wrapper delegates to rust.
+- Ran `cargo test` which succeeded.
+- Full existing API/stdout behavior is preserved.
+- Status: **PASS**
+
+### Files Changed
+- `rusty/Cargo.toml`
+- `rusty/Cargo.lock`
+- `rusty/src/bin/get_chat_template.rs`
+- `scripts/get_chat_template.py`
+
+### Verification Artifacts Created
+- `.jules/verification/rusty/before-benchmark.json`
+- `.jules/verification/rusty/after-benchmark.json`
+- `.jules/verification/rusty/benchmark-summary.md`
+- `.jules/verification/rusty/rust-refactor-report.md`
+
+### Known Limitations
+The pure Rust implementation natively downloads the configuration directly via HTTP API. It doesn't use the complex native Huggingface Hub Python local cache. If a model is gated, the application will provide a helpful error message recommending an `HF_TOKEN` or fallback if necessary.

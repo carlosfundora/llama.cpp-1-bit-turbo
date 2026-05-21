@@ -1,10 +1,9 @@
 {
-  "candidate": "scripts/compare-logprobs.py",
+  "candidate": "scripts/get_chat_template.py",
   "implementation": "before",
-  "command": "python3 scripts/compare-logprobs.py compare dummy1.log dummy2.log output.md",
-  "timestamp": "2026-05-15T03:56:38.560842+00:00",
+  "command": "python scripts/get_chat_template.py microsoft/Phi-3.5-mini-instruct",
+  "timestamp": "2026-05-21T23:38:52+00:00",
   "iterations": 1,
-  "input_description": "Two 50,000 line JSON log files",
-  "duration_ms": 1418.88,
-  "notes": "Testing the compare subcommand (cached result from unpatched codebase)"
+  "input_description": "microsoft/Phi-3.5-mini-instruct template",
+  "duration_ms": 705
 }
