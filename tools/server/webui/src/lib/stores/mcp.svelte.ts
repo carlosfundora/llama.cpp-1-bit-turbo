@@ -1648,29 +1648,33 @@ class MCPStore {
 	/**
 	 * Get list of servers that support resources.
 	 * Checks active connections first, then health check state as fallback.
+	 * ⚡ Bolt Performance Optimization:
+	 * Replaced O(N^2) array `.includes()` scans inside the loop with O(1) `Set` operations
+	 * for more efficient deduplication when traversing connections and health checks.
 	 */
 	getServersWithResources(): string[] {
-		const servers: string[] = [];
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const servers = new Set<string>();
 
 		// Check active connections
 		for (const [name, connection] of this.connections) {
-			if (MCPService.supportsResources(connection) && !servers.includes(name)) {
-				servers.push(name);
+			if (MCPService.supportsResources(connection)) {
+				servers.add(name);
 			}
 		}
 
 		// Also check health check states for servers not yet connected
 		for (const [serverId, state] of Object.entries(this._healthChecks)) {
 			if (
-				!servers.includes(serverId) &&
+				!servers.has(serverId) &&
 				state.status === HealthCheckStatus.SUCCESS &&
 				state.capabilities?.server?.resources !== undefined
 			) {
-				servers.push(serverId);
+				servers.add(serverId);
 			}
 		}
 
-		return servers;
+		return Array.from(servers);
 	}
 
 	/**
