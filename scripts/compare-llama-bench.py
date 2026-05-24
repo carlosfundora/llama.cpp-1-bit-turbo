@@ -476,7 +476,7 @@ class LlamaBenchDataJSONL(LlamaBenchDataSQLite3):
                     keys = tuple(parsed.keys())
                     query = f"INSERT INTO {self.table_name}({', '.join(keys)}) VALUES({', '.join('?' * len(keys))});"
 
-                rows.append(tuple(parsed.values()))
+                rows.append(tuple(parsed[k] for k in keys))
 
             if query and rows:
                 self.cursor.executemany(query, rows)
