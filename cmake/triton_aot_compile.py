@@ -1,3 +1,4 @@
+import logging
 #!/usr/bin/env python3
 """AOT compilation of fused RotorQuant Triton kernels to .hsaco (HIP) or .cubin (CUDA).
 
@@ -14,33 +15,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import logging
 import os
 import sys
 
-try:
-    import triton  # type: ignore
-    from triton import language as tl  # type: ignore
-    from triton.compiler.compiler import ASTSource, compile as tc_compile  # type: ignore
-    _HAS_TRITON = True
-except ImportError:
-    _HAS_TRITON = False
-
-    class _TritonLanguageStub:
-        constexpr = object()
-
-    class _TritonStub:
-        def jit(self, fn=None, **kwargs):
-            if fn is None:
-                return lambda inner: inner
-            return fn
-
-    triton = _TritonStub()
-    tl = _TritonLanguageStub()
-    ASTSource = None  # type: ignore[assignment]
-    tc_compile = None  # type: ignore[assignment]
-
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+import triton  # type: ignore  # type: ignore
+import triton  # type: ignore  # type: ignore
+from triton.compiler.compiler import compile as tc_compile, ASTSource  # type: ignore
 
 # ---------------------------------------------------------------------------
 # Standalone Triton kernel definitions (extracted from sglang RotorQuant engine)
@@ -521,8 +501,6 @@ KERNELS = [
 
 def get_target(target_name: str, arch: str):
     """Build a Triton backend target object."""
-    if not _HAS_TRITON:
-        raise ImportError("Triton is required to compile AOT kernels.")
     if target_name == "hip":
         from triton.backends.amd.compiler import GPUTarget  # type: ignore
         warp_size = 64
@@ -550,7 +528,7 @@ def compile_all(output_dir: str, target_name: str, arch: str) -> None:
         out_name = f"{name}_{suffix}.{ext}"
         out_path = os.path.join(output_dir, out_name)
 
-        print(f"  Compiling {name} ({suffix}) ...", end=" ", flush=True)
+        logging.info(f"  Compiling {name} ({suffix}) ...", end=" ", flush=True)
         try:
             src = ASTSource(fn, signature=sig, constexprs=consts)
             compiled = tc_compile(src, target=target)
@@ -566,9 +544,9 @@ def compile_all(output_dir: str, target_name: str, arch: str) -> None:
             errors.append((name, exc))
 
     if errors:
-        print(f"\n{len(errors)} kernel(s) failed to compile:", file=sys.stderr)
+        logging.info(f"\n{len(errors)} kernel(s) failed to compile:", file=sys.stderr)
         for name, exc in errors:
-            print(f"  {name}: {exc}", file=sys.stderr)
+            logging.info(f"  {name}: {exc}", file=sys.stderr)
         sys.exit(1)
     else:
         logging.info(f"\nAll kernels compiled to {output_dir}/")
