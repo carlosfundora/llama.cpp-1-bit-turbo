@@ -19,6 +19,9 @@ Usage:
 import argparse
 import struct
 import sys
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 from pathlib import Path
 
 import numpy as np
@@ -275,14 +278,14 @@ def validate(header, records, eagle3_path, with_kv_history=False):
         # Per-step output
         status = "✓" if predicted == next_token_id else "✗"
         in_top5 = "T5" if next_token_id in top5_ids else "  "
-        logging.info(f"  [{idx:3d}] {status} {in_top5} | tok={token_id:6d} → "
+        print(f"  [{idx:3d}] {status} {in_top5} | tok={token_id:6d} → "
               f"pred={predicted:6d} truth={next_token_id:6d} | "
               f"spread={spread:7.1f} conf={top_prob:.3f}")
 
     logging.info("")
     logging.info("=" * 70)
     logging.info(f"=== Speculative Harness Report ===")
-    logging.info(f"=" * 70)
+    logging.info("=" * 70)
     logging.info(f"EAGLE3 model:  {eagle3_path}")
     logging.info(f"Records:       {total}")
     logging.info(f"KV history:    {'Yes' if with_kv_history else 'No (single-token)'}")

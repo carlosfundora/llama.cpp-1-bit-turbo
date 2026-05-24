@@ -145,3 +145,4 @@ poetry.toml
 /.windsurf/
 # emscripten
 a.out.*
+venv/
