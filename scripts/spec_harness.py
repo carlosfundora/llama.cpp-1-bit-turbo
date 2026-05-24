@@ -20,7 +20,9 @@ Usage:
 """
 
 import argparse
+import logging
 import struct
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -77,7 +79,7 @@ def read_capture(path):
 
 def feature_stats(header, records):
     """Print feature statistics from a capture file."""
-    ____n_embd = header['n_embd']  # noqa: F841
+    n_embd = header['n_embd']
     n_layers = header['n_layers']
     layer_ids = header['layer_ids']
 
@@ -359,3 +361,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
