@@ -225,6 +225,9 @@ mod tests {
             "__index": 0
         }"#;
         let data: LogprobEntry = serde_json::from_str(json).unwrap();
-        assert_eq!(get_token_logprobs(&data), Some(("hello".to_string(), -0.15)));
+        assert_eq!(
+            get_token_logprobs(&data),
+            Some(("hello".to_string(), -0.15))
+        );
     }
 }

@@ -13,6 +13,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 regex = "1.10"
+unicode-normalization = "0.1.25"
 
 [dev-dependencies]
 tempfile = "3.10"
@@ -28,3 +29,7 @@ path = "src/bin/compare_logprobs.rs"
 [[bin]]
 name = "get_chat_template"
 path = "src/bin/get_chat_template.rs"
+
+[[bin]]
+name = "gen_unicode_data"
+path = "src/bin/gen_unicode_data.rs"
