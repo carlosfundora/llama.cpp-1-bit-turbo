@@ -1,9 +1,0 @@
-{
-  "candidate": "scripts/get_chat_template.py",
-  "implementation": "before",
-  "command": "python scripts/get_chat_template.py microsoft/Phi-3.5-mini-instruct",
-  "timestamp": "2026-05-21T23:38:52+00:00",
-  "iterations": 1,
-  "input_description": "microsoft/Phi-3.5-mini-instruct template",
-  "duration_ms": 705
-}
