@@ -1,8 +1,5 @@
 # Instructions for llama.cpp
 
-Committed first-party tests MUST live in the repository's single root `tests/` tree. For Python packages, use `tests/python/`. Do not split active suites across side-by-side module tests, alternate repo-level trees, or loose root files.
-
-
 > [!IMPORTANT]
 > This project does **not** accept pull requests that are fully or predominantly AI-generated. AI tools may be utilized solely in an assistive capacity.
 >

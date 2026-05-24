@@ -225,7 +225,8 @@ int main(int argc, char ** argv) {
         std::string dir = output_path.substr(0, output_path.find_last_of('/'));
         if (!dir.empty()) {
             std::string cmd = "mkdir -p '" + dir + "'";
-            if (system(cmd.c_str()) != 0) {
+            int ret = system(cmd.c_str());
+            if (ret != 0) {
                 LOG_WRN("Warning: Command failed: %s\n", cmd.c_str());
             }
         }
