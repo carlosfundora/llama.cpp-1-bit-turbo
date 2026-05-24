@@ -21,8 +21,23 @@ try:
     import triton
     import triton.language as tl
     from triton.compiler.compiler import compile as tc_compile, ASTSource
+    _HAS_TRITON = True
 except ImportError:
-    pass
+    _HAS_TRITON = False
+
+    class _TritonLanguageStub:
+        constexpr = object()
+
+    class _TritonStub:
+        def jit(self, fn=None, **kwargs):
+            if fn is None:
+                return lambda inner: inner
+            return fn
+
+    triton = _TritonStub()
+    tl = _TritonLanguageStub()
+    ASTSource = None  # type: ignore[assignment]
+    tc_compile = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
 # Standalone Triton kernel definitions (extracted from sglang RotorQuant engine)
@@ -503,6 +518,8 @@ KERNELS = [
 
 def get_target(target_name: str, arch: str):
     """Build a Triton backend target object."""
+    if not _HAS_TRITON:
+        raise ImportError("Triton is required to compile AOT kernels.")
     if target_name == "hip":
         from triton.backends.amd.compiler import GPUTarget
         warp_size = 64
