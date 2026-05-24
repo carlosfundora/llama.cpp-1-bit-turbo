@@ -40,11 +40,14 @@ fn extract_chat_template(config_str: &str, variant: Option<&str>) -> Result<Stri
         Err(_) => {
             let re = Regex::new(r#"\}([\n\s]*\}[\n\s]*\],[\n\s]*"clean_up_tokenization_spaces")"#)?;
             let fixed_str = re.replace_all(config_str, r#"$1"#);
-            serde_json::from_str(&fixed_str).context("Failed to parse tokenizer_config.json even after regex fix")?
+            serde_json::from_str(&fixed_str)
+                .context("Failed to parse tokenizer_config.json even after regex fix")?
         }
     };
 
-    let chat_template = config.get("chat_template").context("chat_template not found in config")?;
+    let chat_template = config
+        .get("chat_template")
+        .context("chat_template not found in config")?;
 
     if let Some(template_str) = chat_template.as_str() {
         return Ok(template_str.to_string());
@@ -53,28 +56,45 @@ fn extract_chat_template(config_str: &str, variant: Option<&str>) -> Result<Stri
     if let Some(template_arr) = chat_template.as_array() {
         let mut variants = std::collections::HashMap::new();
         for item in template_arr {
-            if let (Some(name), Some(template)) = (item.get("name").and_then(|v| v.as_str()), item.get("template").and_then(|v| v.as_str())) {
+            if let (Some(name), Some(template)) = (
+                item.get("name").and_then(|v| v.as_str()),
+                item.get("template").and_then(|v| v.as_str()),
+            ) {
                 variants.insert(name, template);
             }
         }
 
         let format_variants = || {
-            variants.keys().map(|k| format!("\"{}\"", k)).collect::<Vec<_>>().join(", ")
+            variants
+                .keys()
+                .map(|k| format!("\"{}\"", k))
+                .collect::<Vec<_>>()
+                .join(", ")
         };
 
         match variant {
             None => {
                 if !variants.contains_key("default") {
-                    anyhow::bail!("Please specify a chat template variant (one of {})", format_variants());
+                    anyhow::bail!(
+                        "Please specify a chat template variant (one of {})",
+                        format_variants()
+                    );
                 }
-                eprintln!("Note: picked \"default\" chat template variant (out of {})", format_variants());
+                eprintln!(
+                    "Note: picked \"default\" chat template variant (out of {})",
+                    format_variants()
+                );
                 return Ok(variants.get("default").unwrap().to_string());
             }
             Some(v) => {
                 if let Some(template) = variants.get(v) {
                     return Ok(template.to_string());
                 } else {
-                    anyhow::bail!("Variant {} not found in chat template (found {})", v, format_variants());
+                    anyhow::bail!(
+                        "Variant {} not found in chat template (found {})",
+                        v,
+                        format_variants()
+                    );
                 }
             }
         }
