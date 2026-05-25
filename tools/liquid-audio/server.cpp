@@ -179,6 +179,7 @@ int main(int argc, char ** argv) {
             };
 
             std::vector<int16_t> audio_buffer;
+            audio_buffer.reserve(4096);
             auto flush_audio = [&]() {
                 if (audio_buffer.empty()) return;
                 std::string audio_base64 =
@@ -204,7 +205,7 @@ int main(int argc, char ** argv) {
                     return;
                 }
                 audio_buffer.insert(audio_buffer.end(), audio.begin(), audio.end());
-                if (audio_buffer.size() >= 2048) {
+                if (audio_buffer.size() >= 480) {
                     flush_audio();
                 }
             };

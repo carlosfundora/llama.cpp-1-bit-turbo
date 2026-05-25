@@ -242,6 +242,8 @@ class Runner::RunnerImpl {
     std::optional<int64_t> first_text_received, first_audio_received;
     std::optional<int64_t> last_text_received, last_audio_received;
 
+    std::vector<int16_t> audio_buffer_;
+
     int error(const std::string & msg) {
         LOG_ERR("ERR: %s\n", msg.c_str());
         last_error_ = msg;
@@ -294,9 +296,9 @@ class Runner::RunnerImpl {
                                                    embd.data());
                 GGML_ASSERT(res == 0);
                 auto                 n_samples = mtmd_get_n_audio_samples(mctx);
-                std::vector<int16_t> samples(n_samples);
-                mtmd_get_audio_samples(mctx, samples.data());
-                audio_callback(samples);
+                audio_buffer_.resize(n_samples);
+                mtmd_get_audio_samples(mctx, audio_buffer_.data());
+                audio_callback(audio_buffer_);
 
                 batch.embd  = embd.data();
                 batch.token = nullptr;
