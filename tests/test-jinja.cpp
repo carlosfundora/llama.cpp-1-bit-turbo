@@ -595,6 +595,12 @@ static void test_filters(testing & t) {
         "321"
     );
 
+    test_template(t, "sort case insensitive",
+        "{% for i in items|sort %}{{ i }}{% endfor %}",
+        {{"items", json::array({"b", "A", "c", "D"})}},
+        "AbcD"
+    );
+
     test_template(t, "sort with attribute",
         "{{ items|sort(attribute='name')|join(attribute='age') }}",
         {{"items", json::array({
@@ -1646,6 +1652,12 @@ static void test_object_methods(testing & t) {
         "{% for k, v in obj|dictsort(case_sensitive=true) %}{{ k }}={{ v }} {% endfor %}",
         {{"obj", {{"a", 1}, {"A", 1}, {"b", 2}, {"B", 2}, {"c", 3}}}},
         "A=1 B=2 a=1 b=2 c=3 "
+    );
+
+    test_template(t, "dictsort case insensitive",
+        "{% for k, v in obj|dictsort %}{{ k }}={{ v }} {% endfor %}",
+        {{"obj", {{"b", 2}, {"A", 1}, {"c", 3}, {"D", 4}}}},
+        "A=1 b=2 c=3 D=4 "
     );
 
     test_template(t, "object|tojson",
