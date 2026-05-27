@@ -1,0 +1,9 @@
+{
+  "candidate": "scripts/sync_vendor.py",
+  "implementation": "after",
+  "command": "python3 scripts/sync_vendor.py",
+  "timestamp": "2026-05-27T08:41:42Z",
+  "iterations": 1,
+  "input_description": "Standard sync_vendor execution",
+  "duration_ms": 1787
+}

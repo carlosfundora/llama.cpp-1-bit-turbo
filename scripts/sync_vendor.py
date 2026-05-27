@@ -1,43 +1,26 @@
 #!/usr/bin/env python3
-
-import urllib.request
-import os
 import sys
+import os
 import subprocess
+import logging
 
-HTTPLIB_VERSION = "refs/tags/v0.40.0"
+def main(args):
+    llama_path = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    rusty_dir = os.path.join(llama_path, "rusty")
+    import platform
+    bin_name = "sync_vendor.exe" if platform.system() == "Windows" else "sync_vendor"
+    rusty_bin = os.path.join(rusty_dir, "target", "release", bin_name)
 
-vendor = {
-    "https://github.com/nlohmann/json/releases/latest/download/json.hpp":     "vendor/nlohmann/json.hpp",
-    "https://github.com/nlohmann/json/releases/latest/download/json_fwd.hpp": "vendor/nlohmann/json_fwd.hpp",
+    if not os.path.exists(rusty_bin):
+        logging.info("Rust binary not found. Compiling sync_vendor...")
+        subprocess.run(["cargo", "build", "--release", "--bin", "sync_vendor", "--manifest-path", os.path.join(rusty_dir, "Cargo.toml")], check=True, cwd=rusty_dir)
 
-    "https://raw.githubusercontent.com/nothings/stb/refs/heads/master/stb_image.h": "vendor/stb/stb_image.h",
+    cmd = [rusty_bin] + args
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        sys.exit(e.returncode)
 
-    # not using latest tag to avoid this issue: https://github.com/ggml-org/llama.cpp/pull/17179#discussion_r2515877926
-    # "https://github.com/mackron/miniaudio/raw/refs/tags/0.11.24/miniaudio.h": "vendor/miniaudio/miniaudio.h",
-    "https://github.com/mackron/miniaudio/raw/9634bedb5b5a2ca38c1ee7108a9358a4e233f14d/miniaudio.h": "vendor/miniaudio/miniaudio.h",
-
-    f"https://raw.githubusercontent.com/yhirose/cpp-httplib/{HTTPLIB_VERSION}/httplib.h": "httplib.h",
-    f"https://raw.githubusercontent.com/yhirose/cpp-httplib/{HTTPLIB_VERSION}/split.py":  "split.py",
-    f"https://raw.githubusercontent.com/yhirose/cpp-httplib/{HTTPLIB_VERSION}/LICENSE":   "vendor/cpp-httplib/LICENSE",
-
-    "https://raw.githubusercontent.com/sheredom/subprocess.h/b49c56e9fe214488493021017bf3954b91c7c1f5/subprocess.h": "vendor/sheredom/subprocess.h",
-}
-
-for url, filename in vendor.items():
-    print(f"downloading {url} to {filename}") # noqa: NP100
-    urllib.request.urlretrieve(url, filename)
-
-print("Splitting httplib.h...") # noqa: NP100
-try:
-    subprocess.check_call([
-        sys.executable, "split.py",
-        "--extension", "cpp",
-        "--out", "vendor/cpp-httplib"
-    ])
-except Exception as e:
-    print(f"Error: {e}") # noqa: NP100
-    sys.exit(1)
-finally:
-    os.remove("split.py")
-    os.remove("httplib.h")
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+    main(sys.argv[1:])

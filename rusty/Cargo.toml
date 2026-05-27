@@ -38,3 +38,7 @@ path = "src/bin/get_chat_template.rs"
 [[bin]]
 name = "gen_unicode_data"
 path = "src/bin/gen_unicode_data.rs"
+
+[[bin]]
+name = "sync_vendor"
+path = "src/bin/sync_vendor.rs"
