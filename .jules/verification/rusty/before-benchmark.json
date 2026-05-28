@@ -1,0 +1,11 @@
+{
+  "candidate": "scripts/sync_vendor.py",
+  "implementation": "before",
+  "command": "python3 scripts/sync_vendor.py",
+  "timestamp": "2026-05-28T02:40:12.506198",
+  "iterations": 1,
+  "input_description": "Network download of 8 vendor headers",
+  "duration_ms": 3526,
+  "throughput": "N/A",
+  "notes": ""
+}
