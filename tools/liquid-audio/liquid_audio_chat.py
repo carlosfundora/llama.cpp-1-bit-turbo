@@ -64,7 +64,7 @@ class AudioPlayer:
         self.thread = None
         self.running = False
         self.started = False
-        self.chunk_size = 1024  # Standardized playback chunk size in frames
+        self.chunk_size = 480  # Standardized playback chunk size in frames
 
     def _playback_thread(self):
         """Background thread that writes audio to the stream in uniform chunks."""

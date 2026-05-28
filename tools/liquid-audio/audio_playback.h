@@ -26,7 +26,7 @@ public:
         config.dataCallback = data_callback;
         config.pUserData = this;
         // set small chunk size
-        config.periodSizeInFrames = 1024;
+        config.periodSizeInFrames = 480;
 
         if (ma_device_init(NULL, &config, &device_) != MA_SUCCESS) {
             return false;

@@ -204,7 +204,7 @@ int main(int argc, char ** argv) {
                     return;
                 }
                 audio_buffer.insert(audio_buffer.end(), audio.begin(), audio.end());
-                if (audio_buffer.size() >= 2048) {
+                if (audio_buffer.size() >= 480) {
                     flush_audio();
                 }
             };
