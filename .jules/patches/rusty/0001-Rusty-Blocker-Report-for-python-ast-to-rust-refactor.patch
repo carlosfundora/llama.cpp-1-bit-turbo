@@ -1,0 +1,80 @@
+From 0bcc9db72a2990303ea2cfc65c3cce794b2047c2 Mon Sep 17 00:00:00 2001
+From: "google-labs-jules[bot]"
+ <161369871+google-labs-jules[bot]@users.noreply.github.com>
+Date: Fri, 29 May 2026 00:03:34 +0000
+Subject: [PATCH] Rusty: Blocker Report for python ast to rust refactor
+
+---
+ .jules/verification/rusty/after-benchmark.json    | 10 ++++++++++
+ .jules/verification/rusty/before-benchmark.json   | 10 ++++++++++
+ .jules/verification/rusty/benchmark-summary.md    |  3 +++
+ .jules/verification/rusty/rust-refactor-report.md | 14 ++++++++++++++
+ 4 files changed, 37 insertions(+)
+ create mode 100644 .jules/verification/rusty/after-benchmark.json
+ create mode 100644 .jules/verification/rusty/before-benchmark.json
+ create mode 100644 .jules/verification/rusty/benchmark-summary.md
+ create mode 100644 .jules/verification/rusty/rust-refactor-report.md
+
+diff --git a/.jules/verification/rusty/after-benchmark.json b/.jules/verification/rusty/after-benchmark.json
+new file mode 100644
+index 00000000..48b94c3c
+--- /dev/null
++++ b/.jules/verification/rusty/after-benchmark.json
+@@ -0,0 +1,10 @@
++{
++  "candidate": "scripts/fetch_server_test_models.py",
++  "implementation": "after",
++  "command": "python scripts/fetch_server_test_models.py",
++  "timestamp": "2024-05-26T00:00:00Z",
++  "iterations": 0,
++  "input_description": "N/A",
++  "duration_ms": 0,
++  "notes": "Run aborted."
++}
+diff --git a/.jules/verification/rusty/before-benchmark.json b/.jules/verification/rusty/before-benchmark.json
+new file mode 100644
+index 00000000..4b76a496
+--- /dev/null
++++ b/.jules/verification/rusty/before-benchmark.json
+@@ -0,0 +1,10 @@
++{
++  "candidate": "scripts/fetch_server_test_models.py",
++  "implementation": "before",
++  "command": "python scripts/fetch_server_test_models.py",
++  "timestamp": "2024-05-26T00:00:00Z",
++  "iterations": 0,
++  "input_description": "N/A",
++  "duration_ms": 0,
++  "notes": "Run aborted."
++}
+diff --git a/.jules/verification/rusty/benchmark-summary.md b/.jules/verification/rusty/benchmark-summary.md
+new file mode 100644
+index 00000000..26f291ab
+--- /dev/null
++++ b/.jules/verification/rusty/benchmark-summary.md
+@@ -0,0 +1,3 @@
++# Benchmark Summary
++
++N/A - Run blocked by complexity/safety issues.
+diff --git a/.jules/verification/rusty/rust-refactor-report.md b/.jules/verification/rusty/rust-refactor-report.md
+new file mode 100644
+index 00000000..1df0b12f
+--- /dev/null
++++ b/.jules/verification/rusty/rust-refactor-report.md
+@@ -0,0 +1,14 @@
++# Rusty Rust Refactor Report
++
++## Repository Recon
++- Evaluated `scripts/*.py` which include heavy operations and cross-language boundaries.
++- Python testing tools exist such as `fetch_server_test_models.py`, `server-bench.py`, `spec_harness.py`, `server-test-model.py` and `server-test-structured.py` for testing and benchmarking.
++- A `rusty/` rust workspace is set up and already successfully substitutes some python scripts with high performance compiled rust counterparts.
++- Attempted to refactor `fetch_server_test_models.py`, but its AST parser deals with nested python AST semantics and Python objects which made naive string Regex parsing highly prone to regressions (ignoring missing properties like `hf_file` or misinterpreting comments/tuples).
++- Since the workspace maintainer specifically requested to "stop and return a concise blocker summary with exact files inspected, the reason no patch should be produced", if a clean surgical change is not possible or blocked, I will provide exactly that.
++
++## Blocker Summary
++
++- **Target Inspected:** `scripts/fetch_server_test_models.py`
++- **Reason no patch should be produced:** The target relies on python's `ast` module to correctly and safely parse parameterized python tuple inputs across multiple test files. Re-implementing a safe, equivalent python syntax tree parser in Rust (or approximating it via regex) without causing silent regressions for edge-case tuple syntax or misidentifying values within the files is error-prone, over-complicates the test-discovery phase, and carries a high risk of dropping parameters like `hf_file`. Given the maintainer's strict guidance to avoid generating unstable or complex architectural changes and regressions, and the PR rejection upon code review for the regex failure, we are halting the generation of a patch for this specific candidate.
++- **Alternative extraction candidates worth adopting surgically:** `gguf-py/gguf/scripts/gguf_hash.py`. This script performs sequential hashing of model files in Python. Substituting the core hashing logic with a parallel, memory-mapped Rust binary via the `rusty/` workspace would yield extreme performance gains with zero AST/interpreter edge cases.
+--
+2.53.0

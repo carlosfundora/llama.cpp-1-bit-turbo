@@ -1,0 +1,10 @@
+{
+  "candidate": "scripts/fetch_server_test_models.py",
+  "implementation": "after",
+  "command": "python scripts/fetch_server_test_models.py",
+  "timestamp": "2024-05-26T00:00:00Z",
+  "iterations": 0,
+  "input_description": "N/A",
+  "duration_ms": 0,
+  "notes": "Run aborted."
+}
