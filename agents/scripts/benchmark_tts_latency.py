@@ -21,11 +21,11 @@ def main():
     client = OpenAI(base_url="http://127.0.0.1:8080/v1", api_key="dummy")
     t0 = time.time()
     try:
-        stream = tts(client, "Hello, this is a test.")
+        stream = tts(client, "Hello, this is a test. How are you doing today? It is a beautiful day.")
     except Exception as e:
         print(f"Failed to connect: {e}")
         return
-    ttft = None
+
     first_audio_time = None
     total_samples = 0
     audio_sample_rate = None
@@ -44,8 +44,12 @@ def main():
             samples = np.frombuffer(pcm_bytes, dtype=np.int16)
             total_samples += len(samples)
 
-    print(f"Total time: {time.time() - t0:.3f}s")
+    total_time = time.time() - t0
+    print(f"Total time: {total_time:.3f}s")
     print(f"Total samples: {total_samples}")
+    if audio_sample_rate:
+        duration = total_samples / audio_sample_rate
+        print(f"Audio duration: {duration:.3f}s")
 
 if __name__ == "__main__":
     main()
