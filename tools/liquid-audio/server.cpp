@@ -180,11 +180,14 @@ int main(int argc, char ** argv) {
             };
 
             std::vector<int16_t> audio_buffer;
+            size_t audio_buffer_head = 0;
+            const size_t MAX_BUFFER_SIZE = 4800; // threshold for periodic cleanup
             auto flush_audio_chunk = [&](size_t size_to_flush) {
-                if (audio_buffer.empty() || size_to_flush == 0) return;
-                size_t actual_flush = std::min(size_to_flush, audio_buffer.size());
+                if (audio_buffer.size() <= audio_buffer_head || size_to_flush == 0) return;
+                size_t available = audio_buffer.size() - audio_buffer_head;
+                size_t actual_flush = std::min(size_to_flush, available);
                 std::string audio_base64 =
-                    base64::encode(reinterpret_cast<const char *>(audio_buffer.data()), actual_flush * sizeof(audio_buffer.front()));
+                    base64::encode(reinterpret_cast<const char *>(audio_buffer.data() + audio_buffer_head), actual_flush * sizeof(audio_buffer.front()));
                 json chunk = {
                     { "object",  "chat.completion.chunk"                                                           },
                     { "created", std::time(0)                                                                      },
@@ -197,17 +200,22 @@ int main(int argc, char ** argv) {
                                                  { "finish_reason", nullptr } } }) }
                 };
                 output->push("data: " + chunk.dump() + "\n\n");
-                audio_buffer.erase(audio_buffer.begin(), audio_buffer.begin() + actual_flush);
+                audio_buffer_head += actual_flush;
             };
 
-            auto audio_cb = [&output, &item, &audio_buffer, &flush_audio_chunk](const std::vector<int16_t> & audio) {
+            auto audio_cb = [&output, &item, &audio_buffer, &audio_buffer_head, &flush_audio_chunk, &MAX_BUFFER_SIZE](const std::vector<int16_t> & audio) {
                 item.check_abort();
                 if (output->aborted.load()) {
                     return;
                 }
                 audio_buffer.insert(audio_buffer.end(), audio.begin(), audio.end());
-                while (audio_buffer.size() >= 480) {
+                while (audio_buffer.size() - audio_buffer_head >= 480) {
                     flush_audio_chunk(480);
+                }
+                // Periodic cleanup to avoid memory bloat
+                if (audio_buffer_head > MAX_BUFFER_SIZE) {
+                    audio_buffer.erase(audio_buffer.begin(), audio_buffer.begin() + audio_buffer_head);
+                    audio_buffer_head = 0;
                 }
             };
 
