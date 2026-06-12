@@ -163,6 +163,7 @@ struct mtmd_context {
     // audio output
     std::unique_ptr<mtmd_audio_decoder> audio_decoder;
     std::vector<int16_t> audio_output_outstanding_pcm16;
+    size_t audio_output_read_offset = 0;
     mtmd_output_modality output_modality = MTMD_OUTPUT_MODALITY_TEXT;
 
     // TODO @ngxson : add timings
@@ -1419,6 +1420,8 @@ int mtmd_audio_output_decode(
 void mtmd_audio_output_start_new_turn(mtmd_context * ctx) {
     GGML_ASSERT(mtmd_support_audio_output(ctx));
     ctx->audio_decoder->start_new_turn();
+    ctx->audio_output_outstanding_pcm16.clear();
+    ctx->audio_output_read_offset = 0;
 }
 
 mtmd_output_modality mtmd_get_output_modality(mtmd_context * ctx) {
@@ -1427,14 +1430,32 @@ mtmd_output_modality mtmd_get_output_modality(mtmd_context * ctx) {
 
 int mtmd_get_n_audio_samples(mtmd_context * ctx) {
     GGML_ASSERT(mtmd_support_audio_output(ctx));
-    return (int) ctx->audio_output_outstanding_pcm16.size();
+    int available = (int)ctx->audio_output_outstanding_pcm16.size() - (int)ctx->audio_output_read_offset;
+    if (ctx->output_modality == MTMD_OUTPUT_MODALITY_TEXT) {
+        return available;
+    }
+    const int chunk_size = 480;
+    return available >= chunk_size ? chunk_size : 0;
 }
 
 int mtmd_get_audio_samples(mtmd_context * ctx, int16_t * samples) {
     GGML_ASSERT(mtmd_support_audio_output(ctx));
     const int n_samples = mtmd_get_n_audio_samples(ctx);
-    memcpy(samples, ctx->audio_output_outstanding_pcm16.data(), n_samples * sizeof(int16_t));
-    ctx->audio_output_outstanding_pcm16.clear();
+    if (n_samples > 0) {
+        memcpy(samples, ctx->audio_output_outstanding_pcm16.data() + ctx->audio_output_read_offset, n_samples * sizeof(int16_t));
+        ctx->audio_output_read_offset += n_samples;
+
+        if (ctx->audio_output_read_offset == ctx->audio_output_outstanding_pcm16.size()) {
+            ctx->audio_output_outstanding_pcm16.clear();
+            ctx->audio_output_read_offset = 0;
+        } else if (ctx->audio_output_read_offset >= 4800) {
+            ctx->audio_output_outstanding_pcm16.erase(
+                ctx->audio_output_outstanding_pcm16.begin(),
+                ctx->audio_output_outstanding_pcm16.begin() + ctx->audio_output_read_offset
+            );
+            ctx->audio_output_read_offset = 0;
+        }
+    }
     return n_samples;
 }
 
