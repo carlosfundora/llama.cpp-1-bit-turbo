@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from harness.logger import UnifiedLogger
 import argparse
 import os
 import re
@@ -15,7 +16,7 @@ if "NO_LOCAL_GGUF" not in os.environ and (Path(__file__).parent.parent.parent.pa
 
 from gguf import GGUFReader, GGUFValueType, ReaderTensor  # noqa: E402
 
-logger = logging.getLogger("gguf-dump")
+logger = UnifiedLogger.get_logger("gguf-dump", domain="harness")
 
 
 def get_file_host_endian(reader: GGUFReader) -> tuple[str, str]:

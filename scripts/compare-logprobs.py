@@ -3,8 +3,9 @@ import requests
 import json
 from pathlib import Path
 import logging
+from harness.logger import UnifiedLogger
 
-logger = logging.getLogger("compare-logprobs")
+logger = UnifiedLogger.get_logger("compare-logprobs", domain="harness")
 logging.basicConfig(level=logging.INFO)
 
 

@@ -2,12 +2,13 @@ import argparse
 import json
 import requests
 import logging
+from harness.logger import UnifiedLogger
 import sys
 
 handler = logging.StreamHandler(sys.stdout)
 handler.terminator = ""   # ← no newline
 logging.basicConfig(level=logging.INFO, format='%(message)s', handlers=[handler])
-logger = logging.getLogger("server-test-model")
+logger = UnifiedLogger.get_logger("server-test-model", domain="harness")
 
 
 def run_query(url, messages, tools=None, stream=False, tool_choice=None):

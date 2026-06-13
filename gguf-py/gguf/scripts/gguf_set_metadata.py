@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import logging
+from harness.logger import UnifiedLogger
 import argparse
 import os
 import sys
@@ -11,7 +12,7 @@ if "NO_LOCAL_GGUF" not in os.environ and (Path(__file__).parent.parent.parent.pa
 
 from gguf import GGUFReader  # noqa: E402
 
-logger = logging.getLogger("gguf-set-metadata")
+logger = UnifiedLogger.get_logger("gguf-set-metadata", domain="harness")
 
 
 def minimal_example(filename: str) -> None:

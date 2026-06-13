@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import json
 import yaml
-import logging
+from harness.logger import UnifiedLogger
 from pathlib import Path
 from typing import Any, Literal, Optional
 from dataclasses import dataclass
@@ -12,7 +12,7 @@ from .constants import Keys
 
 import gguf
 
-logger = logging.getLogger("metadata")
+logger = UnifiedLogger.get_logger("metadata", domain="harness")
 
 
 @dataclass

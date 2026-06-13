@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from harness.logger import UnifiedLogger
 import os
 import shutil
 import struct
@@ -32,7 +32,7 @@ from .constants import (
 
 from .quants import quant_shape_from_byte_shape
 
-logger = logging.getLogger(__name__)
+logger = UnifiedLogger.get_logger(__name__, domain="harness")
 
 
 SHARD_NAME_FORMAT = "{:s}-{:05d}-of-{:05d}.gguf"

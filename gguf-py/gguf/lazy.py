@@ -1,14 +1,14 @@
 from __future__ import annotations
 from abc import ABC, ABCMeta, abstractmethod
 
-import logging
+from harness.logger import UnifiedLogger
 from typing import Any, Callable
 
 import numpy as np
 from numpy.typing import DTypeLike
 
 
-logger = logging.getLogger(__name__)
+logger = UnifiedLogger.get_logger(__name__, domain="harness")
 
 
 class LazyMeta(ABCMeta):

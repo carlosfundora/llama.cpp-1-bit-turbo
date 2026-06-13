@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+from harness.logger import UnifiedLogger
 import argparse
 import os
 import sys
@@ -28,7 +29,7 @@ from convert_hf_to_gguf import LazyTorchTensor, ModelBase
 
 from gguf.constants import GGUFValueType
 
-logger = logging.getLogger("lora-to-gguf")
+logger = UnifiedLogger.get_logger("lora-to-gguf", domain="harness")
 
 
 @dataclass

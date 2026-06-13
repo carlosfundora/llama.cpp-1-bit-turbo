@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 import re
-import logging
+from harness.logger import UnifiedLogger
 import json
 import os
 from pathlib import Path
@@ -44,7 +44,7 @@ import gguf
 
 from .gguf_writer import GGUFWriter
 
-logger = logging.getLogger(__name__)
+logger = UnifiedLogger.get_logger(__name__, domain="harness")
 
 
 class SpecialVocab:

@@ -2,7 +2,8 @@
 
 import sys
 import logging
-logger = logging.getLogger("opencl-embed-kernel")
+from harness.logger import UnifiedLogger
+logger = UnifiedLogger.get_logger("opencl-embed-kernel", domain="harness")
 
 
 def main():

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from harness.logger import UnifiedLogger
 import argparse
 import os
 import sys
@@ -29,7 +30,7 @@ import gguf
 from gguf import GGUFReader, GGUFWriter, GGUFValueType, ReaderField
 from gguf.constants import TokenType, RopeScalingType, PoolingType, GGMLQuantizationType
 
-logger = logging.getLogger("gguf-editor-gui")
+logger = UnifiedLogger.get_logger("gguf-editor-gui", domain="harness")
 
 # Map of key names to enum types for automatic enum interpretation
 KEY_TO_ENUM_TYPE = {

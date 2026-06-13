@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from harness.logger import UnifiedLogger
 import argparse
 import os
 import struct
@@ -15,7 +16,7 @@ if 'NO_LOCAL_GGUF' not in os.environ:
     sys.path.insert(1, str(Path(__file__).parent / 'gguf-py'))
 import gguf
 
-logger = logging.getLogger("ggml-to-gguf")
+logger = UnifiedLogger.get_logger("ggml-to-gguf", domain="harness")
 
 
 class GGMLFormat(IntEnum):
