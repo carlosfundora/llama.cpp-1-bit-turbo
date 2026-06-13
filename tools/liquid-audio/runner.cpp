@@ -293,10 +293,13 @@ class Runner::RunnerImpl {
                 int res = mtmd_audio_output_decode(mctx, llama_get_embeddings(ctx.lctx), llama_model_n_embd(ctx.model),
                                                    embd.data());
                 GGML_ASSERT(res == 0);
-                auto                 n_samples = mtmd_get_n_audio_samples(mctx);
-                std::vector<int16_t> samples(n_samples);
-                mtmd_get_audio_samples(mctx, samples.data());
-                audio_callback(samples);
+                // Stream fixed-size audio frames as they become available.
+                int n_samples;
+                while ((n_samples = mtmd_get_n_audio_samples(mctx)) > 0) {
+                    std::vector<int16_t> samples(n_samples);
+                    mtmd_get_audio_samples(mctx, samples.data());
+                    audio_callback(samples);
+                }
 
                 batch.embd  = embd.data();
                 batch.token = nullptr;
