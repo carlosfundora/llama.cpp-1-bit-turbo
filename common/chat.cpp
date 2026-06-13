@@ -37,6 +37,21 @@ static std::string format_time(const std::chrono::system_clock::time_point & now
     return res;
 }
 
+
+static void json_merge(json & target, const json & source) {
+    if (!target.is_object() || !source.is_object()) {
+        target = source;
+        return;
+    }
+    for (const auto & [key, value] : source.items()) {
+        if (target.contains(key) && target[key].is_object() && value.is_object()) {
+            json_merge(target[key], value);
+        } else {
+            target[key] = value;
+        }
+    }
+}
+
 static json safe_args_parse(const std::string & to_parse) {
     std::string stripped = to_parse;
     if (to_parse.at(0) == '"' && to_parse.at(to_parse.length() - 1) == '"') {
@@ -78,7 +93,7 @@ json common_chat_msg::to_json_oaicompat(bool concat_typed_text) const {
     if (!content.empty()) {
         jmsg["content"] = content;
     } else if (!content_parts.empty()) {
-        if (concat_typed_text) {
+        if (concat_typed_text || contains_media()) {
             std::string text;
             bool last_was_media_marker = false;
             // join parts with newline, do not add newline before or after media markers
@@ -778,16 +793,10 @@ std::string common_chat_template_direct_apply(
         inp["tools"] = tools_override.has_value() ? *tools_override : inputs.tools;
     }
     if (inputs.extra_context.is_object()) {
-        // TODO: do we need to merge, or replacing is fine?
-        for (const auto & [k, v] : inputs.extra_context.items()) {
-            inp[k] = v;
-        }
+        json_merge(inp, inputs.extra_context);
     }
     if (additional_context.has_value()) {
-        // TODO: merge properly instead of overwriting (matching old behavior)
-        for (const auto & [k, v] : additional_context->items()) {
-            inp[k] = v;
-        }
+        json_merge(inp, *additional_context);
     }
     if (inputs.add_generation_prompt) {
         inp["add_generation_prompt"] = true;
@@ -1780,8 +1789,8 @@ static common_chat_params common_chat_templates_apply_jinja(const struct common_
         auto auto_params = autoparser::peg_generator::generate_parser(tmpl, params, autoparser);
         auto_params.supports_thinking = autoparser.reasoning.mode != autoparser::reasoning_mode::NONE;
         if (auto_params.supports_thinking) {
-            auto_params.thinking_start_tag = autoparser.reasoning.start;
-            auto_params.thinking_end_tag   = autoparser.reasoning.end;
+            auto_params.thinking_start_tag = trim_whitespace(autoparser.reasoning.start);
+            auto_params.thinking_end_tag   = trim_whitespace(autoparser.reasoning.end);
         }
         auto_params.generation_prompt = params.generation_prompt;
         common_peg_arena arena;
@@ -1940,4 +1949,3 @@ std::map<std::string, bool> common_chat_templates_get_caps(const common_chat_tem
     GGML_ASSERT(chat_templates->template_default != nullptr);
     return chat_templates->template_default->caps.to_map();
 }
-

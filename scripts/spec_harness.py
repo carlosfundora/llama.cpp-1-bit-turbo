@@ -33,6 +33,7 @@ import torch.nn.functional as F
 HEADER_FMT = '<4s I I I 3i I'  # magic, version, n_embd, n_layers, 3×layer_id, n_records
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
 
+
 def read_capture(path):
     """Read a binary capture file. Returns header dict and list of records."""
     with open(path, 'rb') as f:
@@ -120,7 +121,7 @@ def eagle3_decoder_forward(tensors, token_id, g_embd, kv_cache=None, position=0)
         new_kv_cache: updated KV cache
         prenorm: pre-norm hidden state for recurrence [n_embd]
     """
-    n_embd = 2560
+    _ = 2560
     n_heads = 32
     n_kv_heads = 8
     head_dim = 80
@@ -217,7 +218,7 @@ def validate(header, records, eagle3_path, with_kv_history=False):
     import logging; logging.warning(f"Loading EAGLE3 model from {eagle3_path}...")
     tensors = st.load_file(str(eagle3_path / 'model.safetensors'))
 
-    n_embd = header['n_embd']
+    _ = header['n_embd']
     fc_weight = tensors['fc.weight'].float()  # [2560, 7680]
 
     import logging; logging.warning(f"FC weight shape: {fc_weight.shape}")
@@ -306,19 +307,19 @@ def validate(header, records, eagle3_path, with_kv_history=False):
     if top5_pct < 0.05:
         verdict = "MODEL_UNDERTRAINED"
         explanation = ("The EAGLE3 model cannot predict next tokens even with perfect features. "
-                      "This is NOT a code bug — the model needs more training.")
+                       "This is NOT a code bug — the model needs more training.")
     elif top5_pct < 0.15:
         verdict = "MODEL_WEAK"
         explanation = ("The EAGLE3 model has some predictive ability but is too weak for "
-                      "useful speculative decoding. Consider retraining or finding better weights.")
+                       "useful speculative decoding. Consider retraining or finding better weights.")
     elif mean_spread < 10:
         verdict = "PIPELINE_BROKEN"
         explanation = ("Features or decoder weights are corrupted — logit spread is too low. "
-                      "Debug the C++ extraction/decoder pipeline.")
+                       "Debug the C++ extraction/decoder pipeline.")
     else:
         verdict = "MODEL_OK"
         explanation = ("The EAGLE3 model has meaningful predictive ability. "
-                      "If C++ speculative decoding still fails, the issue is in the C++ pipeline.")
+                       "If C++ speculative decoding still fails, the issue is in the C++ pipeline.")
 
     import logging; logging.warning(f"Verdict: {verdict}")
     import logging; logging.warning(f"  {explanation}")

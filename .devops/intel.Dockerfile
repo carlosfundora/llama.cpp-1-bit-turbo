@@ -26,6 +26,7 @@ RUN mkdir -p /app/lib && \
 RUN mkdir -p /app/full \
     && cp build/bin/* /app/full \
     && cp *.py /app/full \
+    && cp -r conversion /app/full \
     && cp -r gguf-py /app/full \
     && cp -r requirements /app/full \
     && cp requirements.txt /app/full \
@@ -33,11 +34,11 @@ RUN mkdir -p /app/full \
 
 FROM intel/deep-learning-essentials:$ONEAPI_VERSION AS base
 
-ARG IGC_VERSION=v2.30.1
-ARG IGC_VERSION_FULL=2_2.30.1+20950
-ARG COMPUTE_RUNTIME_VERSION=26.09.37435.1
-ARG COMPUTE_RUNTIME_VERSION_FULL=26.09.37435.1-0
-ARG IGDGMM_VERSION=22.9.0
+ARG IGC_VERSION=v2.20.5
+ARG IGC_VERSION_FULL=2_2.20.5+19972
+ARG COMPUTE_RUNTIME_VERSION=25.40.35563.10
+ARG COMPUTE_RUNTIME_VERSION_FULL=25.40.35563.10-0
+ARG IGDGMM_VERSION=22.8.2
 RUN mkdir /tmp/neo/ && cd /tmp/neo/ \
   && wget https://github.com/intel/intel-graphics-compiler/releases/download/$IGC_VERSION/intel-igc-core-${IGC_VERSION_FULL}_amd64.deb \
   && wget https://github.com/intel/intel-graphics-compiler/releases/download/$IGC_VERSION/intel-igc-opencl-${IGC_VERSION_FULL}_amd64.deb \
@@ -109,4 +110,3 @@ WORKDIR /app
 HEALTHCHECK CMD [ "curl", "-f", "http://localhost:8080/health" ]
 
 ENTRYPOINT [ "/app/llama-server" ]
-

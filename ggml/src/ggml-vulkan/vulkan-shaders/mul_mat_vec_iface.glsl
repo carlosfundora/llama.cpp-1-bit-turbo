@@ -32,4 +32,3 @@ layout (binding = 4) readonly buffer Fuse1 {D_TYPE data_fuse1[];};
 #ifdef MUL_MAT_ID
 layout (binding = 5) readonly buffer IDS {int data_ids[];};
 #endif
-

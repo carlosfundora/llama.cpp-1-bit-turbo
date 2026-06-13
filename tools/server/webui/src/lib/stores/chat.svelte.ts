@@ -248,9 +248,9 @@ class ChatStore {
 	cleanupOldConversationStates(activeConversationIds?: string[]): number {
 		const now = Date.now();
 		const activeIdsList = activeConversationIds ?? [];
-		const preserveIds = this.activeConversationId
-			? [...activeIdsList, this.activeConversationId]
-			: activeIdsList;
+		const preserveIds = new Set(
+			this.activeConversationId ? [...activeIdsList, this.activeConversationId] : activeIdsList
+		);
 		const allConvIds = [
 			...new Set([
 				...this.chatLoadingStates.keys(),
@@ -262,7 +262,7 @@ class ChatStore {
 		];
 		const cleanupCandidates: Array<{ convId: string; lastAccessed: number }> = [];
 		for (const convId of allConvIds) {
-			if (preserveIds.includes(convId)) continue;
+			if (preserveIds.has(convId)) continue;
 			if (this.chatLoadingStates.get(convId)) continue;
 			if (this.chatStreamingStates.has(convId)) continue;
 			const ts = this.conversationStateTimestamps.get(convId);
@@ -1003,39 +1003,50 @@ class ChatStore {
 			const messagesToDelete = allMessages.filter((m) => m.id === messageId);
 			let userMessages = 0,
 				assistantMessages = 0;
-			const messageTypes: string[] = [];
+			const messageTypes = new Set<string>();
 
 			for (const msg of messagesToDelete) {
 				if (msg.role === MessageRole.USER) {
 					userMessages++;
-					if (!messageTypes.includes('user message')) messageTypes.push('user message');
+					messageTypes.add('user message');
 				} else if (msg.role === MessageRole.ASSISTANT) {
 					assistantMessages++;
-					if (!messageTypes.includes('assistant response')) messageTypes.push('assistant response');
+					messageTypes.add('assistant response');
 				}
 			}
 
-			return { totalCount: 1, userMessages, assistantMessages, messageTypes };
+			return {
+				totalCount: 1,
+				userMessages,
+				assistantMessages,
+				messageTypes: Array.from(messageTypes)
+			};
 		}
 
 		const descendants = findDescendantMessages(allMessages, messageId);
 		const allToDelete = [messageId, ...descendants];
-		const messagesToDelete = allMessages.filter((m) => allToDelete.includes(m.id));
+		const allToDeleteSet = new Set(allToDelete);
+		const messagesToDelete = allMessages.filter((m) => allToDeleteSet.has(m.id));
 		let userMessages = 0,
 			assistantMessages = 0;
-		const messageTypes: string[] = [];
+		const messageTypes = new Set<string>();
 
 		for (const msg of messagesToDelete) {
 			if (msg.role === MessageRole.USER) {
 				userMessages++;
-				if (!messageTypes.includes('user message')) messageTypes.push('user message');
+				messageTypes.add('user message');
 			} else if (msg.role === MessageRole.ASSISTANT) {
 				assistantMessages++;
-				if (!messageTypes.includes('assistant response')) messageTypes.push('assistant response');
+				messageTypes.add('assistant response');
 			}
 		}
 
-		return { totalCount: allToDelete.length, userMessages, assistantMessages, messageTypes };
+		return {
+			totalCount: allToDelete.length,
+			userMessages,
+			assistantMessages,
+			messageTypes: Array.from(messageTypes)
+		};
 	}
 
 	async deleteMessage(messageId: string): Promise<void> {

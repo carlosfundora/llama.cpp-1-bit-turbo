@@ -189,6 +189,24 @@ class LoraTorchTensor:
     def swapaxes(self, axis0: int, axis1: int) -> LoraTorchTensor:
         return self.transpose(axis0, axis1)
 
+    def split(self, split_size: int | Sequence[int], dim: int = 0) -> tuple[LoraTorchTensor, ...]:
+        shape = self.shape
+        ndim = len(shape)
+        if dim < 0:
+            dim += ndim
+        if dim == ndim - 1:
+            A_chunks = self._lora_A.split(split_size, dim=-1)
+            return tuple(LoraTorchTensor(a, self._lora_B) for a in A_chunks)
+        elif dim == ndim - 2:
+            B_chunks = self._lora_B.split(split_size, dim=-2)
+            return tuple(LoraTorchTensor(self._lora_A, b) for b in B_chunks)
+        else:
+            B_chunks = self._lora_B.split(split_size, dim=dim)
+            if self._lora_A.shape[dim] == 1:
+                return tuple(LoraTorchTensor(self._lora_A, b) for b in B_chunks)
+            A_chunks = self._lora_A.split(split_size, dim=dim)
+            return tuple(LoraTorchTensor(a, b) for a, b in zip(A_chunks, B_chunks))
+
     def to(self, *args, **kwargs):
         return LoraTorchTensor(self._lora_A.to(*args, **kwargs), self._lora_B.to(*args, **kwargs))
 
@@ -231,6 +249,11 @@ class LoraTorchTensor:
                 )
             else:
                 raise NotImplementedError
+        elif func is torch.split:
+            assert len(args) and len(args) >= 2
+            tensor, split_size = args[0], args[1]
+            dim = args[2] if len(args) > 2 else kwargs.get("dim", 0)
+            return tensor.split(split_size, dim=dim)
         else:
             raise NotImplementedError
 
@@ -424,6 +447,11 @@ if __name__ == '__main__':
                     if self.lazy:
                         tensor = LazyTorchTensor.from_eager(tensor)
                     base_name = get_base_tensor_name(name)
+                    # filter base name, ignore tensor transformations for now
+                    data_gen = lambda g=tensor: g  # noqa: E731
+                    if (titem := self.filter_tensors((base_name, data_gen))) is None:
+                        continue
+                    base_name, _ = titem
                     # note: mergekit-extract-lora also adds token embeddings to the adapter
                     is_lora_a = ".lora_A.weight" in name or ".lora_embedding_A" in name
                     is_lora_b = ".lora_B.weight" in name or ".lora_embedding_B" in name

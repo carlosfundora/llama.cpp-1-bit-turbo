@@ -539,6 +539,12 @@ class ModelBase:
             raise ValueError(f"Can not map tensor {name!r}")
         return new_name
 
+
+
+    @property
+    def n_experts(self) -> int:
+        return self.find_hparam(["num_local_experts", "num_experts"], optional=True) or 0
+
     def set_gguf_parameters(self):
         raise NotImplementedError("set_gguf_parameters() must be implemented in subclasses")
 
@@ -738,6 +744,9 @@ class ModelBase:
 
         del experts, merged
 
+    def _needs_nvfp4_processing(self) -> bool:
+        return True
+
     def prepare_tensors(self):
         # detect NVFP4 quantization (ModelOpt format)
         quant_algo = (self.hparams.get("quantization_config") or {}).get("quant_algo")
@@ -763,7 +772,7 @@ class ModelBase:
         # NVFP4 weights are repacked and written directly to gguf_writer.
         # This must run before dequant_model so NVFP4 tensors are removed
         # from model_tensors, leaving only non-NVFP4 (e.g. FP8) for dequant.
-        if self._is_nvfp4:
+        if self._is_nvfp4 and self._needs_nvfp4_processing():
             self._generate_nvfp4_tensors()
 
         self.dequant_model()
@@ -2135,7 +2144,8 @@ class MmprojModel(ModelBase):
             text_config = {
                 k: v for k, v in self.hparams.items() if k not in ["vision_encoder", "audio_encoder"]
             }
-            self.n_embd_text = text_config.get("hidden_dim", 0)
+            # mistral native params.json: "dim" is the text hidden size ("hidden_dim" is the FFN intermediate size)
+            self.n_embd_text = text_config.get("dim", 0)
 
         assert self.n_embd_text > 0, "n_embd not found in hparams"
 
@@ -2186,6 +2196,10 @@ class MmprojModel(ModelBase):
                     }
                 # merge configs
                 self.preprocessor_config = {**self.preprocessor_config, **cfg}
+
+    def _needs_nvfp4_processing(self) -> bool:
+        # nvfp4 quantization applies to the text model only.
+        return False
 
     def get_vision_config(self) -> dict[str, Any] | None:
         config_name = "vision_config" if not self.is_mistral_format else "vision_encoder"
@@ -2813,8 +2827,12 @@ class LlamaModel(TextModel):
         # fix for SmolVLM2, missing `num_attention_heads` in config.json
         if self.hf_arch == "VLlama3ForCausalLM":
             self.hparams["num_attention_heads"] = self.hparams.get("num_attention_heads", 32)
-        hparams = ModelBase.load_hparams(self.dir_model, is_mistral_format=False)
-        self.origin_hf_arch = hparams.get('architectures', [None])[0]
+        # Mistral consolidated format has no config.json; origin_hf_arch is HF-only.
+        if self.is_mistral_format:
+            self.origin_hf_arch = None
+        else:
+            hparams = ModelBase.load_hparams(self.dir_model, is_mistral_format=False)
+            self.origin_hf_arch = hparams.get('architectures', [None])[0]
 
     def set_vocab(self):
         if self.origin_hf_arch == "GlmasrModel":
@@ -2878,6 +2896,20 @@ class LlamaModel(TextModel):
         return (weights.reshape(n_head, 2, weights.shape[0] // n_head // 2, *weights.shape[1:])
                 .swapaxes(1, 2)
                 .reshape(weights.shape))
+
+    def _repack_nvfp4(self, name: str, weight: Tensor, scale: Tensor, scale2: Tensor, input_scale: Tensor):
+        # Mirror the BF16 Q/K RoPE permutation site in modify_tensors; the NVFP4 path bypasses it.
+        if self.undo_permute:
+            n_head = self.find_hparam(["n_heads", "num_attention_heads"], optional=True)
+            n_kv_head = self.find_hparam(["n_kv_heads", "num_key_value_heads"], optional=True)
+            if n_head is not None:
+                if name.endswith("q_proj.weight"):
+                    weight = LlamaModel.permute(weight, n_head, n_head)
+                    scale  = LlamaModel.permute(scale, n_head, n_head)
+                elif name.endswith("k_proj.weight"):
+                    weight = LlamaModel.permute(weight, n_head, n_kv_head)
+                    scale  = LlamaModel.permute(scale, n_head, n_kv_head)
+        super()._repack_nvfp4(name, weight, scale, scale2, input_scale)
 
     _experts: list[dict[str, Tensor]] | None = None
 
@@ -3028,7 +3060,7 @@ class AfmoeModel(LlamaModel):
         # Handle expert weights - they're already merged in the HF format
         # process the experts separately
         if name.find("mlp.experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -3081,6 +3113,11 @@ class LlavaVisionModel(MmprojModel):
             assert self.hparams["norm_eps"] is not None, "norm_eps not found in params.json"
             if self.use_break_tok:
                 self.img_break_tok_id = self.find_vparam(["image_break_token_id"])
+
+                # params.json may ship -1 placeholders (Mistral Medium 3.5)
+                # resolve the real id from the bundled tokenizer in that case
+                if self.img_break_tok_id < 0:
+                    self.img_break_tok_id = self.get_mistral_token_id("[IMG_BREAK]")
         else:
             raise ValueError(f"Unsupported model type: {self.hparams['model_type']}")
         logger.info(f"Image break token id: {self.img_break_tok_id}")
@@ -3099,6 +3136,24 @@ class LlavaVisionModel(MmprojModel):
                 if token_data["content"] == token:
                     return int(token_data["id"])
         raise ValueError(f"Token '{token}' not found in tokenizer config.")
+
+    def get_mistral_token_id(self, token: str) -> int:
+        # mistral native format ships tekken.json or a versioned spm tokenizer
+        tekken_file = self.dir_model / "tekken.json"
+        if tekken_file.is_file():
+            with open(tekken_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for entry in data.get("special_tokens", []):
+                if entry.get("token_str") == token:
+                    return int(entry["rank"])
+        tokenizer_json_file = self.dir_model / "tokenizer.json"
+        if tokenizer_json_file.is_file():
+            with open(tokenizer_json_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for entry in data.get("added_tokens", []):
+                if entry.get("content") == token:
+                    return int(entry["id"])
+        raise ValueError(f"Token '{token}' not found in mistral tokenizer files.")
 
     def set_gguf_parameters(self):
         super().set_gguf_parameters()
@@ -4518,6 +4573,12 @@ class NemotronNanoV2VLModel(MmprojModel):
         }
         return vision_config
 
+    def dequant_model(self):
+        if self._is_nvfp4:
+            # Skip nvfp4 quantization for vision/audio model.
+            return
+        super().dequant_model()
+
     def set_gguf_parameters(self):
         if "image_mean" not in self.preprocessor_config:
             self.preprocessor_config["image_mean"] = [0.485, 0.456, 0.406]
@@ -4539,6 +4600,10 @@ class NemotronNanoV2VLModel(MmprojModel):
 
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         if "input_conditioner" in name:
+            return
+
+        # mtmd does not support video yet so skip tensors related to video.
+        if "radio_model.model.patch_generator.video_embedder" in name:
             return
 
         # RADIO's pos_embed doesn't have .weight suffix, but clip.cpp expects it
@@ -4666,7 +4731,7 @@ class Qwen2MoeModel(TextModel):
             return
 
         if name.find("experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -5694,7 +5759,7 @@ class PhiMoeModel(Phi3MiniModel):
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         # process the experts separately
         if name.find("block_sparse_moe.experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -6106,7 +6171,7 @@ class KimiLinearModel(TextModel):
 
         # process the experts separately
         if name.find("block_sparse_moe.experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -6701,7 +6766,7 @@ class NomicBertModel(BertModel):
         if "mlp.experts.bias" in name:
             return # Explicitly return.
 
-        n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+        n_experts = self.n_experts
         if "mlp.experts.mlp.w1" in name:
             data_torch = data_torch.view(n_experts, self.hparams["n_inner"], self.hparams["n_embd"])
             name += ".weight"
@@ -8279,7 +8344,7 @@ class JambaModel(TextModel):
 
         # process the experts separately
         if ".feed_forward.experts." in name:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
 
             assert bid is not None
 
@@ -8445,7 +8510,7 @@ class OlmoeModel(TextModel):
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         # process the experts separately
         if name.find("experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -9131,7 +9196,7 @@ class MiniMaxM2Model(TextModel):
 
         # merge expert weights
         if 'experts' in name:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             expert_cache = self._experts_cache.setdefault(bid, {})
@@ -10410,7 +10475,7 @@ class ExaoneMoEModel(Exaone4Model):
             name = name.replace("e_score_correction_bias", "e_score_correction.bias")
 
         if name.find("mlp.experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -10689,7 +10754,11 @@ class NemotronHModel(GraniteHybridModel):
         # uses self.model_arch to build the tensor name map, and all MoE-specific
         # mappings would be missed if it were called with the default non-MoE arch.
         hparams = ModelBase.load_hparams(args[0], self.is_mistral_format)
-        if "num_experts_per_tok" in hparams:
+        has_moe_params = (
+            "num_experts_per_tok" in hparams
+            or (isinstance(hparams.get("llm_config"), dict) and "num_experts_per_tok" in hparams["llm_config"])
+        )
+        if has_moe_params:
             self.model_arch = gguf.MODEL_ARCH.NEMOTRON_H_MOE
             self.is_moe = True
 
@@ -10777,6 +10846,11 @@ class NemotronHModel(GraniteHybridModel):
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         # Skip vision model and projector tensors for VLM models (handled by mmproj) (e.g., Nemotron Nano 12B v2 VL)
         if name.startswith(("vision_model.", "mlp1.")):
+            return
+
+        if name.startswith(("sound_encoder.")):
+            return
+        if name.startswith(("sound_projection.")):
             return
 
         # Strip language_model. prefix for VLM models (e.g., Nemotron Nano 12B v2 VL)
@@ -10917,7 +10991,7 @@ class BailingMoeModel(TextModel):
             yield from super().modify_tensors(v,self.format_tensor_name(gguf.MODEL_TENSOR.ATTN_V, bid), bid)
             return
         elif name.find("mlp.experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -10998,7 +11072,7 @@ class BailingMoeV2Model(TextModel):
 
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         if "mlp.experts" in name:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -11064,7 +11138,7 @@ class GroveMoeModel(TextModel):
 
         # process the experts separately
         if name.find("chunk_experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"]) // 2 # see add_experts_per_group
+            n_experts = self.n_experts // 2 # see add_experts_per_group
             assert bid is not None
 
             if self._chunk_experts is None:
@@ -11091,7 +11165,7 @@ class GroveMoeModel(TextModel):
             else:
                 return
         elif name.find("experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -11526,7 +11600,7 @@ class HunYuanMoEModel(TextModel):
                 return
 
         if name.find("mlp.experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -11581,7 +11655,7 @@ class LLaDAMoEModel(TextModel):
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         # process the experts separately
         if name.find("experts") != -1:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -11941,7 +12015,7 @@ class LFM2MoeModel(TextModel):
 
         # merge expert weights
         if 'experts' in name:
-            n_experts = self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.n_experts
             assert bid is not None
 
             expert_cache = self._experts_cache.setdefault(bid, {})
@@ -12100,7 +12174,7 @@ class SmallThinkerModel(TextModel):
     def modify_tensors(self, data_torch: Tensor, name: str, bid: int | None) -> Iterable[tuple[str, Tensor]]:
         # process the experts separately
         if name.find("experts") != -1:
-            n_experts = self.hparams.get("moe_num_primary_experts") or self.find_hparam(["num_local_experts", "num_experts"])
+            n_experts = self.hparams.get("moe_num_primary_experts") or self.n_experts
             assert bid is not None
 
             if self._experts is None:
@@ -12285,11 +12359,12 @@ class MistralModel(LlamaModel):
     def set_mistral_config(gguf_writer: gguf.GGUFWriter, hparams: dict):
         if "yarn" in hparams:
             yarn_params = hparams["yarn"]
+            mscale_all_dim = 1.0 if not yarn_params["apply_scale"] else 0.0
             gguf_writer.add_rope_scaling_type(gguf.RopeScalingType.YARN)
             gguf_writer.add_rope_scaling_factor(yarn_params["factor"])
             gguf_writer.add_rope_scaling_yarn_beta_fast(yarn_params["beta"])
             gguf_writer.add_rope_scaling_yarn_beta_slow(yarn_params["alpha"])
-            gguf_writer.add_rope_scaling_yarn_log_mul(1.0) # mscale_all_dim
+            gguf_writer.add_rope_scaling_yarn_log_mul(mscale_all_dim)
             gguf_writer.add_rope_scaling_orig_ctx_len(yarn_params["original_max_position_embeddings"])
 
         if "llama_4_scaling" in hparams:
@@ -12405,7 +12480,7 @@ class PixtralModel(LlavaVisionModel):
         self.gguf_writer.add_vision_use_silu(True)
 
         # spatial_merge_size
-        if self.find_vparam(["mm_projector_id"]) == "patch_merge":
+        if self.find_vparam(["mm_projector_id"], optional=True) == "patch_merge":
             self.gguf_writer.add_vision_spatial_merge_size(
                 self.find_vparam(["spatial_merge_size"])
             )
@@ -12413,8 +12488,12 @@ class PixtralModel(LlavaVisionModel):
     def map_tensor_name(self, name: str, try_suffixes: Sequence[str] = (".weight", ".bias")) -> str:
         if name == "vision_language_adapter.w_in.weight":
             return "mm.1.weight"
+        elif name == "vision_language_adapter.w_in.bias":
+            return "mm.1.bias"
         elif name == "vision_language_adapter.w_out.weight":
             return "mm.2.weight"
+        elif name == "vision_language_adapter.w_out.bias":
+            return "mm.2.bias"
         return super().map_tensor_name(name, try_suffixes)
 
 
@@ -12784,17 +12863,18 @@ class LazyTorchTensor(gguf.LazyBase):
     }
 
     # only used when byteswapping data. Only correct size is needed
+    # TODO: uncomment uint64, uint32, and uint16, ref: https://github.com/pytorch/pytorch/issues/58734
     _dtype_byteswap_map: dict[torch.dtype, type] = {
         torch.float64: np.float64,
         torch.float32: np.float32,
         torch.bfloat16: np.float16,
         torch.float16: np.float16,
         torch.int64: np.int64,
-        torch.uint64: np.uint64,
+        # torch.uint64: np.uint64,
         torch.int32: np.int32,
-        torch.uint32: np.uint32,
+        # torch.uint32: np.uint32,
         torch.int16: np.int16,
-        torch.uint16: np.uint16,
+        # torch.uint16: np.uint16,
         torch.int8: np.int8,
         torch.uint8: np.uint8,
         torch.bool: np.uint8,

@@ -60,8 +60,13 @@ function deriveSingleTurnSections(
 
 	// 3. Persisted tool calls (from message.toolCalls field)
 	const toolCalls = parseToolCalls(message.toolCalls);
+	const toolMessagesByCallId = new Map(toolMessages.map((m) => [m.toolCallId, m]));
+	const persistedToolCallIds = new Set<string>();
+
 	for (const tc of toolCalls) {
-		const resultMsg = toolMessages.find((m) => m.toolCallId === tc.id);
+		if (tc.id) persistedToolCallIds.add(tc.id);
+
+		const resultMsg = toolMessagesByCallId.get(tc.id);
 		sections.push({
 			type: resultMsg ? AgenticSectionType.TOOL_CALL : AgenticSectionType.TOOL_CALL_PENDING,
 			content: resultMsg?.content || '',
@@ -75,7 +80,7 @@ function deriveSingleTurnSections(
 	// 4. Streaming tool calls (not yet persisted - currently being received)
 	for (const tc of streamingToolCalls) {
 		// Skip if already in persisted tool calls
-		if (tc.id && toolCalls.find((t) => t.id === tc.id)) continue;
+		if (tc.id && persistedToolCallIds.has(tc.id)) continue;
 		sections.push({
 			type: AgenticSectionType.TOOL_CALL_STREAMING,
 			content: '',

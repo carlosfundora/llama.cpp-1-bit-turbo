@@ -1507,4 +1507,3 @@ void llama_grammar_accept_token(struct llama_grammar & grammar, llama_token toke
         throw std::runtime_error("Unexpected empty grammar stack after accepting piece: " + piece + " (" + std::to_string(token) + ")");
     }
 }
-

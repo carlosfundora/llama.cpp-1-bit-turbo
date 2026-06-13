@@ -3,7 +3,6 @@
 #include "chat.h"
 #include "common.h"
 #include "download.h"
-#include "hf-cache.h"
 #include "json-schema-to-grammar.h"
 #include "log.h"
 #include "sampling.h"
@@ -243,6 +242,8 @@ std::vector<std::string> common_arg::get_env() const {
 
 // Helper function to parse tensor buffer override strings
 static void parse_tensor_buffer_overrides(const std::string & value, std::vector<llama_model_tensor_buft_override> & overrides) {
+    ggml_backend_load_all();
+
     std::map<std::string, ggml_backend_buffer_type_t> buft_list;
     for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
         auto * dev = ggml_backend_dev_get(i);
@@ -348,8 +349,7 @@ static handle_model_result common_params_handle_model(struct common_params_model
         auto download_result = common_download_model(model, bearer_token, opts);
 
         if (download_result.model_path.empty()) {
-            LOG_ERR("error: failed to download model from Hugging Face\n");
-            exit(1);
+            throw std::runtime_error("failed to download model from Hugging Face");
         }
 
         model.name = model.hf_repo;
@@ -370,8 +370,7 @@ static handle_model_result common_params_handle_model(struct common_params_model
         opts.offline = offline;
         auto download_result = common_download_model(model, bearer_token, opts);
         if (download_result.model_path.empty()) {
-            LOG_ERR("error: failed to download model from %s\n", model.url.c_str());
-            exit(1);
+            throw std::runtime_error("failed to download model from " + model.url);
         }
     }
 
@@ -545,12 +544,6 @@ static bool common_params_parse_ex(int argc, char ** argv, common_params_context
     // parse the first time to get -hf option (used for remote preset)
     parse_cli_args();
 
-    // TODO: Remove later
-    try {
-        hf_cache::migrate_old_cache_to_hf_cache(params.hf_token, params.offline);
-    } catch (const std::exception & e) {
-        LOG_WRN("HF cache migration failed: %s\n", e.what());
-    }
     // export_graph_ops loads only metadata
     const bool skip_model_download = ctx_arg.ex == LLAMA_EXAMPLE_EXPORT_GRAPH_OPS;
 
@@ -799,6 +792,7 @@ static std::vector<ggml_backend_dev_t> parse_device_list(const std::string & val
     if (dev_names.size() == 1 && dev_names[0] == "none") {
         devices.push_back(nullptr);
     } else {
+        ggml_backend_load_all();
         for (const auto & device : dev_names) {
             auto * dev = ggml_backend_dev_by_name(device.c_str());
             if (!dev || ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_CPU) {
@@ -816,6 +810,7 @@ static void add_rpc_devices(const std::string & servers) {
     if (rpc_servers.empty()) {
         throw std::invalid_argument("no RPC servers specified");
     }
+    ggml_backend_load_all();
     ggml_backend_reg_t rpc_reg = ggml_backend_reg_by_name("RPC");
     if (!rpc_reg) {
         throw std::invalid_argument("failed to find RPC backend");
@@ -1011,9 +1006,6 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
     }
 
     params.use_color = tty_can_use_colors();
-
-    // load dynamic backends
-    ggml_backend_load_all();
 
     common_params_context ctx_arg(params);
     ctx_arg.print_usage = print_usage;
@@ -2263,6 +2255,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         {"--list-devices"},
         "print list of available devices and exit",
         [](common_params &) {
+            ggml_backend_load_all();
             std::vector<ggml_backend_dev_t> devices;
             for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
                 auto * dev = ggml_backend_dev_get(i);
@@ -2787,7 +2780,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         [](common_params & params, int value) {
             params.embd_normalize = value;
         }
-    ).set_examples({LLAMA_EXAMPLE_EMBEDDING, LLAMA_EXAMPLE_DEBUG}));
+    ).set_examples({LLAMA_EXAMPLE_EMBEDDING, LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_DEBUG}));
     add_opt(common_arg(
         {"--embd-output-format"}, "FORMAT",
         "empty = default, \"array\" = [[],[]...], \"json\" = openai style, \"json+\" = same \"json\" + cosine similarity matrix, \"raw\" = plain whitespace-delimited output (one embedding per line)",
@@ -2870,7 +2863,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         {"--tools"}, "TOOL1,TOOL2,...",
         "experimental: whether to enable built-in tools for AI agents - do not enable in untrusted environments (default: no tools)\n"
         "specify \"all\" to enable all tools\n"
-        "available tools: read_file, file_glob_search, grep_search, exec_shell_command, write_file, edit_file, apply_diff",
+        "available tools: read_file, file_glob_search, grep_search, exec_shell_command, write_file, edit_file, apply_diff, get_datetime",
         [](common_params & params, const std::string & value) {
             params.server_tools = parse_csv_row(value);
         }
@@ -3294,7 +3287,8 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             " - 1: error\n"
             " - 2: warning\n"
             " - 3: info\n"
-            " - 4: debug\n"
+            " - 4: trace (more info)\n"
+            " - 5: debug\n"
             "(default: %d)\n", params.verbosity),
         [](common_params & params, int value) {
             params.verbosity = value;

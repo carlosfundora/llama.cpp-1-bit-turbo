@@ -285,9 +285,7 @@ static void llama_adapter_lora_init_impl(llama_model & model, const char * path_
                 ab_map[name].b = cur;
             }
         } else if (str_endswith(name, "_norm.weight")) {
-            // TODO: add support for norm vector
-            // for now, we don't really care because most adapters still work fine without it
-            continue;
+            ab_map[name] = llama_adapter_lora_weight(cur, nullptr);
         } else {
             throw std::runtime_error("LoRA tensor '" + name + "' has unexpected suffix");
         }
@@ -321,8 +319,9 @@ static void llama_adapter_lora_init_impl(llama_model & model, const char * path_
         const std::string & name = it.first;
         llama_adapter_lora_weight & w = it.second;
         bool is_token_embd = str_endswith(name, "token_embd.weight");
+        bool is_norm = str_endswith(name, "_norm.weight");
 
-        if (!w.a || !w.b) {
+        if (!w.a || (!w.b && !is_norm)) {
             throw std::runtime_error("LoRA tensor pair for '" + name + "' is missing one component");
         }
 
@@ -353,7 +352,11 @@ static void llama_adapter_lora_init_impl(llama_model & model, const char * path_
 
         ggml_context * dev_ctx = ctx_for_buft(buft);
         // validate tensor shape
-        if (is_token_embd) {
+        if (is_norm) {
+            if (model_tensor->ne[0] != w.a->ne[0] || model_tensor->ne[1] != w.a->ne[1]) {
+                throw std::runtime_error("tensor '" + name + "' has incorrect shape (hint: maybe wrong base model?)");
+            }
+        } else if (is_token_embd) {
             // expect B to be non-transposed, A and B are flipped; see llm_build_inp_embd()
             if (model_tensor->ne[0] != w.b->ne[1] || model_tensor->ne[1] != w.a->ne[1]) {
                 throw std::runtime_error("tensor '" + name + "' has incorrect shape (hint: maybe wrong base model?)");
@@ -369,9 +372,11 @@ static void llama_adapter_lora_init_impl(llama_model & model, const char * path_
 
         // save tensor to adapter
         ggml_tensor * tensor_a = ggml_dup_tensor(dev_ctx, w.a);
-        ggml_tensor * tensor_b = ggml_dup_tensor(dev_ctx, w.b);
+        ggml_tensor * tensor_b = w.b ? ggml_dup_tensor(dev_ctx, w.b) : nullptr;
         ggml_set_name(tensor_a, w.a->name);
-        ggml_set_name(tensor_b, w.b->name);
+        if (tensor_b) {
+            ggml_set_name(tensor_b, w.b->name);
+        }
         adapter.ab_map[name] = llama_adapter_lora_weight(tensor_a, tensor_b);
     }
 
@@ -407,7 +412,9 @@ static void llama_adapter_lora_init_impl(llama_model & model, const char * path_
             auto orig = ab_map[it.first];
             auto dev  = it.second;
             set_tensor(orig.a, dev.a);
-            set_tensor(orig.b, dev.b);
+            if (orig.b && dev.b) {
+                set_tensor(orig.b, dev.b);
+            }
         }
     }
 

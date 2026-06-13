@@ -400,20 +400,26 @@ struct server_slot {
         const double n_gen_second = 1e3 / t_token_generation * n_decoded;
 
         SLT_INF(*this,
-                "\n"
-                "prompt eval time = %10.2f ms / %5d tokens (%8.2f ms per token, %8.2f tokens per second)\n"
-                "       eval time = %10.2f ms / %5d tokens (%8.2f ms per token, %8.2f tokens per second)\n"
+                "prompt eval time = %10.2f ms / %5d tokens (%8.2f ms per token, %8.2f tokens per second)\n",
+                t_prompt_processing, n_prompt_tokens_processed, t_prompt, n_prompt_second);
+
+        SLT_INF(*this,
+                "       eval time = %10.2f ms / %5d tokens (%8.2f ms per token, %8.2f tokens per second)\n",
+                t_token_generation, n_decoded, t_gen, n_gen_second);
+
+        SLT_INF(*this,
                 "      total time = %10.2f ms / %5d tokens\n",
-                t_prompt_processing, n_prompt_tokens_processed, t_prompt, n_prompt_second,
-                t_token_generation, n_decoded, t_gen, n_gen_second,
                 t_prompt_processing + t_token_generation, n_prompt_tokens_processed + n_decoded);
+
+        SLT_INF(*this,
+                "   graphs reused = %10d\n",
+                llama_perf_context(ctx_tgt).n_reused);
 
         if (n_draft_total > 0) {
             const float draft_ratio = (float) n_draft_accepted / n_draft_total;
-            SLT_CNT(*this,
-                    "draft acceptance rate = %0.5f (%5d accepted / %5d generated)\n",
-                    draft_ratio, n_draft_accepted, n_draft_total
-            );
+            SLT_INF(*this,
+                    "draft acceptance = %0.5f (%5d accepted / %5d generated)\n",
+                    draft_ratio, n_draft_accepted, n_draft_total);
         }
 
         common_speculative_print_stats(spec);
@@ -433,6 +439,9 @@ struct server_slot {
 
         if (ptask) {
             res["id_task"] = ptask->id;
+            res["n_prompt_tokens"]           = (int32_t) prompt.tokens.size();
+            res["n_prompt_tokens_processed"] = n_prompt_tokens_processed;
+            res["n_prompt_tokens_cache"]     = n_prompt_tokens_cache;
             res["params"] = ptask->params.to_json(only_metrics);
             res["next_token"] = {
                 {
@@ -606,6 +615,10 @@ private:
     bool sleeping = false;
 
     void destroy() {
+        spec.reset();
+        ctx_dft.reset();
+        model_dft.reset();
+
         llama_init.reset();
         ctx = nullptr;
         model = nullptr;
@@ -3713,10 +3726,6 @@ void server_routes::init_routes() {
                     {"name",  "n_tokens_max"},
                     {"help",  "Largest observed n_tokens."},
                     {"value",  res_task->n_tokens_max}
-            }, {
-                    {"name",  "n_busy_slots_per_decode"},
-                    {"help",  "Average number of busy slots per llama_decode() call"},
-                    {"value",  (float) res_task->n_busy_slots_total / std::max((float) res_task->n_decode_total, 1.f)}
             }}},
             {"gauge", {{
                     {"name",  "prompt_tokens_seconds"},
@@ -3734,6 +3743,10 @@ void server_routes::init_routes() {
                     {"name",  "requests_deferred"},
                     {"help",  "Number of requests deferred."},
                     {"value",  (uint64_t) res_task->n_tasks_deferred}
+            },{
+                    {"name",  "n_busy_slots_per_decode"},
+                    {"help",  "Average number of busy slots per llama_decode() call"},
+                    {"value",  (float) res_task->n_busy_slots_total / std::max((float) res_task->n_decode_total, 1.f)}
             }}}
         };
 
@@ -4142,22 +4155,7 @@ void server_routes::init_routes() {
             }},
             {"object", "list"},
             {"data", {
-                {
-                    {"id",       meta->model_name},
-                    {"aliases",  meta->model_aliases},
-                    {"tags",     meta->model_tags},
-                    {"object",   "model"},
-                    {"created",  std::time(0)},
-                    {"owned_by", "llamacpp"},
-                    {"meta",     {
-                        {"vocab_type",  meta->model_vocab_type},
-                        {"n_vocab",     meta->model_vocab_n_tokens},
-                        {"n_ctx_train", meta->model_n_ctx_train},
-                        {"n_embd",      meta->model_n_embd_inp},
-                        {"n_params",    meta->model_n_params},
-                        {"size",        meta->model_size},
-                    }},
-                },
+                get_model_info(),
             }}
         };
 
@@ -4371,6 +4369,26 @@ void server_routes::init_routes() {
     };
 }
 
+json server_routes::get_model_info() const {
+    return json {
+        {"id",       meta->model_name},
+        {"aliases",  meta->model_aliases},
+        {"tags",     meta->model_tags},
+        {"object",   "model"},
+        {"created",  std::time(0)},
+        {"owned_by", "llamacpp"},
+        {"meta",     {
+            {"vocab_type",  meta->model_vocab_type},
+            {"n_vocab",     meta->model_vocab_n_tokens},
+            {"n_ctx",       meta->slot_n_ctx},
+            {"n_ctx_train", meta->model_n_ctx_train},
+            {"n_embd",      meta->model_n_embd_inp},
+            {"n_params",    meta->model_n_params},
+            {"size",        meta->model_size},
+        }},
+    };
+}
+
 std::unique_ptr<server_res_generator> server_routes::handle_slots_save(const server_http_req & req, int id_slot) {
     auto res = create_response();
     const json request_data = json::parse(req.body);
@@ -4517,7 +4535,7 @@ std::unique_ptr<server_res_generator> server_routes::handle_embeddings_impl(cons
         }
     }
 
-    int embd_normalize = 2; // default to Euclidean/L2 norm
+    int embd_normalize = params.embd_normalize;
     if (body.count("embd_normalize") != 0) {
         embd_normalize = body.at("embd_normalize");
         if (meta->pooling_type == LLAMA_POOLING_TYPE_NONE) {

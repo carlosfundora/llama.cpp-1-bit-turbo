@@ -47,7 +47,7 @@
 
 			{# ---------- Property Definition ---------- #}
             {%- set type_str = json_schema_to_typescript(
-                val, 
+                val,
                 indent + "  "
             ) -%}
 
@@ -211,7 +211,7 @@
 {# ----- SPECIAL TOKENS ----- #}
 
 {%- set add_tokens = namespace(
-    role_sep="<|role_sep|>\n", 
+    role_sep="<|role_sep|>\n",
     message_sep="<|message_sep|>\n\n"
 ) -%}
 
@@ -254,7 +254,7 @@ The assistant can work with the following modalities: text, available functions.
 </available_modalities>
 
 <instruction_priority>
-If instructions from different roles conflict within the dialog context, observe the following priorities:  
+If instructions from different roles conflict within the dialog context, observe the following priorities:
 `developer system` > `system` > `user` > `function descriptions` > `function result` > `user memory`
 </instruction_priority>
 
@@ -309,7 +309,7 @@ Your task is to continue the dialog from the last specified role in accordance w
 {# ----- RENDER TOOLS ----- #}
 {%- if tools -%}
     {%- set tools_content = (
-        render_tool_namespace('functions', tools) 
+        render_tool_namespace('functions', tools)
         + "\n\n"
     ) -%}
     {{- render_role_message({'role': 'function descriptions', 'content': tools_content}) -}}
@@ -340,7 +340,7 @@ Your task is to continue the dialog from the last specified role in accordance w
             {{- render_function_call({'role': 'function call', 'content': function_call}) -}}
         {%- endif -%}
 
-        
+
     {# ----- OTHER MESSAGES ----- #}
     {%- else -%}
         {{- render_role_message(message) -}}

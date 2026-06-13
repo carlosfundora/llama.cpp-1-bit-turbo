@@ -1,0 +1,3 @@
+## 2025-02-18 - Replacing std::set for sequence usage tracking in C++ KV cache
+**Learning:** In highly optimized sequence tracking or allocation logic (e.g. `llama_kv_cells` used by `llama-kv-cache.cpp` during `find_slot()`), using `std::set<uint32_t>` for marking free/used block indices causes extreme performance bottlenecks under heavy sequence loads because of O(log N) tree modifications and memory fragmentation.
+**Action:** Replace `std::set` structures with primitive scalars (`_used_count`, `_used_min`, `_used_max_p1`) and leverage parallel pre-existing arrays (like `pos[i] != -1`) for extremely fast pseudo-O(1) continuous min/max tracking when modifying boundaries.

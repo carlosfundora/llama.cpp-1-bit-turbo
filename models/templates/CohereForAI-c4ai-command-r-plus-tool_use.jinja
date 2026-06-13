@@ -18,7 +18,7 @@
     {%- for t in json_spec.type %}
       {{- json_to_python_type({"type": t}) }}
       {%- if not loop.last %}
-        {{- "," }} 
+        {{- "," }}
     {%- endif %}
     {%- endfor %}
     {{- "]" }}
@@ -79,7 +79,7 @@ def ' + tool.name + '('}}
     {%- if loop.index0 != 0 %}
       {{- ', '}}
     {%- endif %}
-    {{-param_name + ": "}} 
+    {{-param_name + ": "}}
     {%- if not param_name in tool.parameters.required %}
       {{-'Optional[' + json_to_python_type(param_fields) + '] = None'}}
     {%- else %}
@@ -169,7 +169,7 @@ Here is a list of tools that you have available to you:
         {{- '{\n'|indent(4, first=true) }}
         {{- '"tool_name": "'|indent(8, first=true) + tool_call.name + '",\n' }}
         {{- '"parameters": '|indent(8, first=true) }}
-        {%- if tool_call.arguments is defined and tool_call.arguments|length > 0 %}    
+        {%- if tool_call.arguments is defined and tool_call.arguments|length > 0 %}
             {{- tool_call.arguments|tojson(indent=4)|indent(8) }}
             {{- '\n' }}
         {%- else %}

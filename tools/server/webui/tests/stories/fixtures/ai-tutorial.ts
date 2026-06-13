@@ -58,7 +58,7 @@ export function initializeSocketIO(server: ViteDevServer) {
 
     io.on('connection', (socket) => {
         console.log('User connected:', socket.id);
-        
+
         socket.on('message', async (data) => {
             // Broadcast to all clients
             io.emit('new-message', {
@@ -95,12 +95,12 @@ export interface Message {
 function createChatStore() {
     const { subscribe, update } = writable<Message[]>([]);
     let socket: ReturnType<typeof io>;
-    
+
     return {
         subscribe,
         connect: () => {
             socket = io('http://localhost:5173');
-            
+
             socket.on('new-message', (message: Message) => {
                 update(messages => [...messages, message]);
             });
@@ -118,11 +118,11 @@ ${'```'}
 
 ## 🎯 Key Features
 
-✅ **Real-time messaging** with WebSockets  
-✅ **Message persistence** using Prisma + PostgreSQL  
-✅ **Type-safe** with TypeScript  
-✅ **Responsive UI** for all devices  
-✅ **Auto-reconnection** on connection loss  
+✅ **Real-time messaging** with WebSockets
+✅ **Message persistence** using Prisma + PostgreSQL
+✅ **Type-safe** with TypeScript
+✅ **Responsive UI** for all devices
+✅ **Auto-reconnection** on connection loss
 
 ## 📊 Performance Metrics
 

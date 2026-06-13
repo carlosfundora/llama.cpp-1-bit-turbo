@@ -194,7 +194,7 @@ For the full list of features, please refer to [server's changelog](https://gith
 | `--webui-config JSON` | JSON that provides default WebUI settings (overrides WebUI defaults)<br/>(env: LLAMA_ARG_WEBUI_CONFIG) |
 | `--webui-config-file PATH` | JSON file that provides default WebUI settings (overrides WebUI defaults)<br/>(env: LLAMA_ARG_WEBUI_CONFIG_FILE) |
 | `--webui-mcp-proxy, --no-webui-mcp-proxy` | experimental: whether to enable MCP CORS proxy - do not enable in untrusted environments (default: disabled)<br/>(env: LLAMA_ARG_WEBUI_MCP_PROXY) |
-| `--tools TOOL1,TOOL2,...` | experimental: whether to enable built-in tools for AI agents - do not enable in untrusted environments (default: no tools)<br/>specify "all" to enable all tools<br/>available tools: read_file, file_glob_search, grep_search, exec_shell_command, write_file, edit_file, apply_diff<br/>(env: LLAMA_ARG_TOOLS) |
+| `--tools TOOL1,TOOL2,...` | experimental: whether to enable built-in tools for AI agents - do not enable in untrusted environments (default: no tools)<br/>specify "all" to enable all tools<br/>available tools: read_file, file_glob_search, grep_search, exec_shell_command, write_file, edit_file, apply_diff, get_datetime<br/>(env: LLAMA_ARG_TOOLS) |
 | `--webui, --no-webui` | whether to enable the Web UI (default: enabled)<br/>(env: LLAMA_ARG_WEBUI) |
 | `--embedding, --embeddings` | restrict to only support embedding use case; use only with dedicated embedding models (default: disabled)<br/>(env: LLAMA_ARG_EMBEDDINGS) |
 | `--rerank, --reranking` | enable reranking endpoint on server (default: disabled)<br/>(env: LLAMA_ARG_RERANKING) |
@@ -1018,16 +1018,23 @@ If query param `?fail_on_no_slot=1` is set, this endpoint will respond with stat
 
 This endpoint is only accessible if `--metrics` is set.
 
-Available metrics:
-- `llamacpp:prompt_tokens_total`: Number of prompt tokens processed.
-- `llamacpp:tokens_predicted_total`: Number of generation tokens processed.
-- `llamacpp:prompt_tokens_seconds`: Average prompt throughput in tokens/s.
-- `llamacpp:predicted_tokens_seconds`: Average generation throughput in tokens/s.
-- `llamacpp:kv_cache_usage_ratio`: KV-cache usage. `1` means 100 percent usage.
-- `llamacpp:kv_cache_tokens`: KV-cache tokens.
-- `llamacpp:requests_processing`: Number of requests processing.
-- `llamacpp:requests_deferred`: Number of requests deferred.
-- `llamacpp:n_tokens_max`: High watermark of the context size observed.
+In *router mode* the query param `?model={model_id}` has to be set. This endpoint will respond with status code 400 `model name is missing from the request` if not set.
+
+#### Available metrics
+
+| Metric | Type | Description |
+| ------ | ---------------------- | ----------- |
+| `llamacpp:prompt_tokens_total` | Counter | Number of prompt tokens processed. |
+| `llamacpp:prompt_seconds_total` | Counter | Prompt process time in seconds. |
+| `llamacpp:prompt_tokens_seconds` | Gauge | Average prompt throughput in tokens/s. |
+| `llamacpp:tokens_predicted_total` | Counter | Number of generation tokens processed. |
+| `llamacpp:tokens_predicted_seconds_total` | Counter | Predict process time in seconds. |
+| `llamacpp:predicted_tokens_seconds` | Gauge | Average generation throughput in tokens/s. |
+| `llamacpp:requests_processing` | Gauge | Number of requests processing. |
+| `llamacpp:requests_deferred` | Gauge | Number of requests deferred. |
+| `llamacpp:n_tokens_max` | Counter | High watermark of the context size observed. |
+| `llamacpp:n_decode_total` | Counter | Total Number of llama_decode() calls. |
+| `llamacpp:n_busy_slots_per_decode` | Gauge | Average number of busy slots per llama_decode() call. |
 
 ### POST `/slots/{id_slot}?action=save`: Save the prompt cache of the specified slot to a file.
 
@@ -1288,6 +1295,22 @@ The response contains a `timings` object, for example:
 This provides information on the performance of the server. It also allows calculating the current context usage.
 
 The total number of tokens in context is equal to `prompt_n + cache_n + predicted_n`
+
+The response also includes a standard `usage` object:
+
+```js
+{
+    // ...
+    "usage": {
+        "completion_tokens": 48,
+        "prompt_tokens": 44,
+        "total_tokens": 92,
+        "prompt_tokens_details": {
+            "cached_tokens": 0
+        }
+    }
+}
+```
 
 *Reasoning support*
 
@@ -1619,7 +1642,12 @@ Listing all models in cache. The model metadata will also include a field to ind
 }
 ```
 
-Note: For a local GGUF (stored offline in a custom directory), the model object will have `"in_cache": false`.
+Note:
+1. For a local GGUF (stored offline in a custom directory), the model object will have `"in_cache": false`.
+2. Adding `?reload=1` to the query params will refresh the list of models. The behavior is as follow:
+    - If a model is running but updated or removed from the source, it will be unloaded
+    - If a model is not running, it will be added or updated according to the source
+3. When the model is loaded, the info from `/v1/models` is forwarded to router's `/v1/models`. This includes metadata about the model and the runtime instance.
 
 The `status` object can be:
 

@@ -258,32 +258,35 @@ struct common_sampler * common_sampler_init(const struct llama_model * model, st
         }
     }
 
+    // Compute prefill tokens from the generation prompt
+    std::vector<llama_token> prefill_tokens;
+    if (!params.generation_prompt.empty()) {
+        GGML_ASSERT(vocab != nullptr);
+        auto tokens = common_tokenize(vocab, params.generation_prompt, false, true);
+        for (size_t i = 0; i < tokens.size(); i++) {
+            std::string piece = common_token_to_piece(vocab, tokens[i], true);
+            if (i == 0 && std::isspace(piece[0]) && !std::isspace(params.generation_prompt[0])) {
+                // Some tokenizers will add a space before the first special token, need to exclude
+                continue;
+            }
+            LOG_DBG("%s: prefill token: %d = %s\n", __func__, tokens[i], piece.c_str());
+            prefill_tokens.push_back(tokens[i]);
+        }
+    }
+
     // Feed generation prompt tokens to the grammar sampler so it advances past
     // tokens the template already placed in the prompt.
     // Only applies to output-format and tool-call grammars; user-supplied grammars must not be prefilled.
-    std::vector<llama_token> prefill_tokens;
-    if (!params.generation_prompt.empty() && common_grammar_needs_prefill(params.grammar)) {
-        GGML_ASSERT(vocab != nullptr);
-        prefill_tokens = common_tokenize(vocab, params.generation_prompt, false, true);
-        if (!prefill_tokens.empty()) {
-            std::string first_token = common_token_to_piece(vocab, prefill_tokens[0], true);
-            if (std::isspace(first_token[0]) && !std::isspace(params.generation_prompt[0])) {
-                // Some tokenizers will add a space before the first special token, need to remove
-                prefill_tokens = std::vector<llama_token>(prefill_tokens.begin() + 1, prefill_tokens.end());
+    if (grmr && !params.grammar_lazy && common_grammar_needs_prefill(params.grammar)) {
+        try {
+            for (const auto & token : prefill_tokens) {
+                llama_sampler_accept(grmr, token);
+                LOG_DBG("%s: grammar accepted prefill token (%d)\n", __func__, token);
             }
-        }
-
-        if (grmr && !params.grammar_lazy) {
-            try {
-                for (const auto & token : prefill_tokens) {
-                    llama_sampler_accept(grmr, token);
-                    LOG_DBG("%s: accepted prefill token (%d)\n", __func__, token);
-                }
-            } catch (std::exception &e) {
-                LOG_ERR("%s: error initializing grammar sampler for grammar:\n%s\n\nGeneration prompt:\n'%s'\n", __func__,
-                    common_grammar_value(params.grammar).c_str(), params.generation_prompt.c_str());
-                throw e;
-            }
+        } catch (std::exception &e) {
+            LOG_ERR("%s: error initializing grammar sampler for grammar:\n%s\n\nGeneration prompt:\n'%s'\n", __func__,
+                common_grammar_value(params.grammar).c_str(), params.generation_prompt.c_str());
+            throw e;
         }
     }
 
@@ -294,8 +297,12 @@ struct common_sampler * common_sampler_init(const struct llama_model * model, st
             params.reasoning_budget_start,
             params.reasoning_budget_end,
             params.reasoning_budget_forced,
-            params.reasoning_budget_tokens < 0 ? INT_MAX : params.reasoning_budget_tokens,
-            prefill_tokens);
+            params.reasoning_budget_tokens < 0 ? INT_MAX : params.reasoning_budget_tokens);
+
+        for (const auto & token : prefill_tokens) {
+            llama_sampler_accept(rbudget, token);
+            LOG_DBG("%s: reasoning-budget accepted prefill token (%d)\n", __func__, token);
+        }
     }
 
     if (params.has_logit_bias()) {
@@ -429,7 +436,7 @@ static bool grammar_should_apply(struct common_sampler * gsmpl) {
     return true;
 }
 
-void common_sampler_accept(struct common_sampler * gsmpl, llama_token token, bool accept_grammar) {
+void common_sampler_accept(struct common_sampler * gsmpl, llama_token token, bool is_generated) {
     if (!gsmpl) {
         return;
     }
@@ -437,9 +444,11 @@ void common_sampler_accept(struct common_sampler * gsmpl, llama_token token, boo
     const auto tm = gsmpl->tm();
 
     // grammar_should_apply() checks the reasoning budget state, so calculate this before we accept
-    accept_grammar = accept_grammar && grammar_should_apply(gsmpl);
+    const auto accept_grammar = is_generated && grammar_should_apply(gsmpl);
 
-    llama_sampler_accept(gsmpl->rbudget, token);
+    if (gsmpl->rbudget && is_generated) {
+        llama_sampler_accept(gsmpl->rbudget, token);
+    }
 
     if (gsmpl->grmr && accept_grammar) {
         llama_sampler_accept(gsmpl->grmr, token);
@@ -829,4 +838,61 @@ std::vector<common_sampler_type> common_sampler_types_from_chars(const std::stri
     }
 
     return samplers;
+}
+
+void common_params_sampling_init(const struct llama_model * model, struct common_params_sampling & sparams) {
+    const uint64_t config = sparams.user_sampling_config;
+
+    auto get_int32 = [&](const char * key, int32_t & dst, uint64_t user_config) {
+        if (config & user_config) {
+            return;
+        }
+
+        char buf[64] = {0};
+        if (llama_model_meta_val_str(model, key, buf, sizeof(buf)) > 0) {
+            char * end = nullptr;
+            int32_t v = strtol(buf, &end, 10);
+            if (end && end != buf) {
+                dst = v;
+            }
+        }
+    };
+
+    auto get_float = [&](const char * key, float & dst, uint64_t user_config) {
+        if (config & user_config) {
+            return;
+        }
+
+        char buf[128] = {0};
+        if (llama_model_meta_val_str(model, key, buf, sizeof(buf)) > 0) {
+            char * end = nullptr;
+            float v = strtof(buf, &end);
+            if (end && end != buf) {
+                dst = v;
+            }
+        }
+    };
+
+    // Sampling sequence
+    if (!(config & common_params_sampling_config::COMMON_PARAMS_SAMPLING_CONFIG_SAMPLERS)) {
+        char buf[512] = {0};
+        if (llama_model_meta_val_str(model, llama_model_meta_key_str(LLAMA_MODEL_META_KEY_SAMPLING_SEQUENCE), buf, sizeof(buf)) > 0) {
+            const std::vector<std::string> sampler_names = string_split<std::string>(std::string(buf), ';');
+            if (!sampler_names.empty()) {
+                sparams.samplers = common_sampler_types_from_names(sampler_names, true);
+            }
+        }
+    }
+
+    get_int32(llama_model_meta_key_str(LLAMA_MODEL_META_KEY_SAMPLING_TOP_K),           sparams.top_k,           common_params_sampling_config::COMMON_PARAMS_SAMPLING_CONFIG_TOP_K);
+    get_float(llama_model_meta_key_str(LLAMA_MODEL_META_KEY_SAMPLING_TOP_P),           sparams.top_p,           common_params_sampling_config::COMMON_PARAMS_SAMPLING_CONFIG_TOP_P);
+    get_float(llama_model_meta_key_str(LLAMA_MODEL_META_KEY_SAMPLING_MIN_P),           sparams.min_p,           common_params_sampling_config::COMMON_PARAMS_SAMPLING_CONFIG_MIN_P);
+    get_float(llama_model_meta_key_str(LLAMA_MODEL_META_KEY_SAMPLING_XTC_PROBABILITY), sparams.xtc_probability, common_params_sampling_config::COMMON_PARAMS_SAMPLING_CONFIG_XTC_PROBABILITY);
+    get_float(llama_model_meta_key_str(LLAMA_MODEL_META_KEY_SAMPLING_XTC_THRESHOLD),   sparams.xtc_threshold,   common_params_sampling_config::COMMON_PARAMS_SAMPLING_CONFIG_XTC_THRESHOLD);
+    get_float(llama_model_meta_key_str(LLAMA_MODEL_META_KEY_SAMPLING_TEMP),            sparams.temp,            common_params_sampling_config::COMMON_PARAMS_SAMPLING_CONFIG_TEMP);
+    get_int32(llama_model_meta_key_str(LLAMA_MODEL_META_KEY_SAMPLING_PENALTY_LAST_N),  sparams.penalty_last_n,  common_params_sampling_config::COMMON_PARAMS_SAMPLING_CONFIG_PENALTY_LAST_N);
+    get_float(llama_model_meta_key_str(LLAMA_MODEL_META_KEY_SAMPLING_PENALTY_REPEAT),  sparams.penalty_repeat,  common_params_sampling_config::COMMON_PARAMS_SAMPLING_CONFIG_PENALTY_REPEAT);
+    get_int32(llama_model_meta_key_str(LLAMA_MODEL_META_KEY_SAMPLING_MIROSTAT),        sparams.mirostat,        common_params_sampling_config::COMMON_PARAMS_SAMPLING_CONFIG_MIROSTAT);
+    get_float(llama_model_meta_key_str(LLAMA_MODEL_META_KEY_SAMPLING_MIROSTAT_TAU),    sparams.mirostat_tau,    common_params_sampling_config::COMMON_PARAMS_SAMPLING_CONFIG_MIROSTAT_TAU);
+    get_float(llama_model_meta_key_str(LLAMA_MODEL_META_KEY_SAMPLING_MIROSTAT_ETA),    sparams.mirostat_eta,    common_params_sampling_config::COMMON_PARAMS_SAMPLING_CONFIG_MIROSTAT_ETA);
 }

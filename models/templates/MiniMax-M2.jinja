@@ -32,7 +32,7 @@
         {%- endif -%}
         {{- model_identity }}
     {%- endif -%}
-    
+
     {#- Handle current_date -#}
     {%- if system_message and system_message.current_date -%}
         {{- '\n' ~ 'Current date: ' + system_message.current_date }}
@@ -116,14 +116,14 @@
                 {% endfor %}
                 {{- '</invoke>' ~ '\n' }}
             {%- endfor -%}
-            
+
             {{- toolcall_end_token}}
             {%- set last_tool_call.name = message.tool_calls[-1].function.name -%}
         {%- else -%}
             {%- set last_tool_call.name = none -%}
         {%- endif -%}
         {{- '[e~[' ~ '\n' }}
-        
+
     {%- elif message.role == 'tool' -%}
     {%- if last_tool_call.name is none -%}
         {{- raise_exception("Message has tool role, but there was no previous assistant message with a tool call!") }}
@@ -145,7 +145,7 @@
     {%- if loop.last or (conversation_messages[loop.index0 + 1].role != 'tool') -%}
         {{- '[e~[\n' -}}
     {%- endif -%}
-        
+
     {%- elif message.role == 'user' -%}
         {{- ']~b]user' ~ '\n' }}
         {{- visible_text(message.content) }}

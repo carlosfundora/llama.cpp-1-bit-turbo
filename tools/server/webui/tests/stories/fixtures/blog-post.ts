@@ -31,10 +31,10 @@ Traditional approaches to memory management:
 ${'```'}rust
 fn main() {
     let s = String::from("hello");  // s comes into scope
-    
+
     // s is valid here
     println!("{}", s);
-    
+
 }  // s goes out of scope and is dropped
 ${'```'}
 
@@ -44,7 +44,7 @@ ${'```'}rust
 fn main() {
     let s1 = String::from("hello");
     let s2 = s1;  // s1 is moved to s2
-    
+
     // println!("{}", s1);  // ❌ ERROR: s1 is no longer valid
     println!("{}", s2);     // ✅ OK: s2 owns the string
 }
@@ -73,11 +73,11 @@ ${'```'}
 ${'```'}rust
 fn main() {
     let mut s = String::from("hello");
-    
+
     let r1 = &mut s;
     r1.push_str(", world");
     println!("{}", r1);
-    
+
     // let r2 = &mut s;  // ❌ ERROR: cannot borrow twice
 }
 ${'```'}

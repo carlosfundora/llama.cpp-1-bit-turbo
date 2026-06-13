@@ -139,7 +139,9 @@
 		const serverProps = serverStore.props;
 
 		if (serverProps) {
-			settingsStore.syncWithServerDefaults();
+			untrack(() => {
+				settingsStore.syncWithServerDefaults();
+			});
 		}
 	});
 

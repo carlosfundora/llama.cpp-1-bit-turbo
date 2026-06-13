@@ -21,7 +21,7 @@
     {%- for t in json_spec.type %}
       {{- json_to_python_type({"type": t}) }}
       {%- if not loop.last %}
-        {{- "," }} 
+        {{- "," }}
     {%- endif %}
     {%- endfor %}
     {{- "]" }}

@@ -101,4 +101,3 @@ Use the `GGML_RPC_DEBUG` environment variable to enable debug messages from `rpc
 ```bash
 $ GGML_RPC_DEBUG=1 bin/rpc-server
 ```
-

@@ -11,7 +11,7 @@
 	import { DropdownMenuActions } from '$lib/components/app';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { FORK_TREE_DEPTH_PADDING } from '$lib/constants';
-	import { getAllLoadingChats } from '$lib/stores/chat.svelte';
+	import { isChatLoading } from '$lib/stores/chat.svelte';
 	import { conversationsStore } from '$lib/stores/conversations.svelte';
 	import { onMount } from 'svelte';
 
@@ -40,7 +40,9 @@
 	let renderActionsDropdown = $state(false);
 	let dropdownOpen = $state(false);
 
-	let isLoading = $derived(getAllLoadingChats().includes(conversation.id));
+	// ⚡ Bolt: Using isChatLoading avoids O(N) array allocation from getAllLoadingChats()
+	// and O(N) .includes() check on every state update, reducing CPU usage.
+	let isLoading = $derived(isChatLoading(conversation.id));
 
 	function handleEdit(event: Event) {
 		event.stopPropagation();

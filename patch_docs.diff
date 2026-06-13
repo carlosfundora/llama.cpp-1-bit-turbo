@@ -1,0 +1,19 @@
+--- CHANGELOG.md
++++ CHANGELOG.md
+@@ -1,3 +1,6 @@
++## Documentation
++- Updated : README.md
++
+ ## [Unreleased]
+
+ ### Added
+--- README.md
++++ README.md
+@@ -124,7 +124,7 @@
+
+ To obtain the built executables, you can either compile them from source or download the pre-compiled nightly binaries.
+
+-## Build
++## Build instructions
+
+ ### Quick Start

@@ -1139,6 +1139,7 @@ static webgpu_command ggml_webgpu_gated_delta_net(webgpu_context & ctx,
     const uint32_t h        = (uint32_t) src2->ne[1];
     const uint32_t n_tokens = (uint32_t) src2->ne[2];
     const uint32_t n_seqs   = (uint32_t) src2->ne[3];
+    const uint32_t K        = (uint32_t) src5->ne[1];
     const float    scale    = 1.0f / sqrtf((float) s_v);
     uint32_t       scale_u32;
     memcpy(&scale_u32, &scale, sizeof(scale_u32));
@@ -1163,6 +1164,7 @@ static webgpu_command ggml_webgpu_gated_delta_net(webgpu_context & ctx,
 
         (uint32_t) src0->ne[1],
         (uint32_t) (src2->ne[3] / src0->ne[3]),
+        K,
         scale_u32,
     };
 
@@ -2791,6 +2793,16 @@ static ggml_status ggml_backend_webgpu_graph_compute(ggml_backend_t backend, str
             ctx->global_ctx->instance.ProcessEvents();
             ggml_backend_webgpu_wait(ctx->global_ctx, subs, false);
             commands.clear();
+#ifdef GGML_WEBGPU_GPU_PROFILE
+            // flush before the next batch can overflow the QuerySet
+            if (ctx->profile_timestamp_query_count + 2 * ctx->global_ctx->command_submit_batch_size >=
+                WEBGPU_MAX_PROFILE_QUERY_COUNT) {
+                ggml_backend_webgpu_collect_profile_results(ctx, profile_pipeline_names, num_inflight_batches);
+                // reset profile timestamp state
+                ctx->profile_timestamp_query_count = 0;
+                profile_pipeline_names.clear();
+            }
+#endif
         }
     }
     if (!commands.empty()) {

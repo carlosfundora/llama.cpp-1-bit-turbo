@@ -133,7 +133,12 @@
 			siblingInfo: ChatMessageSiblingInfo;
 		}> = [];
 
-		for (let i = 0; i < filteredMessages.length; i++) {
+				const nodeMap = new Map<string, DatabaseMessage>();
+		for (const msg of allConversationMessages) {
+			nodeMap.set(msg.id, msg);
+		}
+
+for (let i = 0; i < filteredMessages.length; i++) {
 			const msg = filteredMessages[i];
 
 			// Skip tool messages - they're grouped with preceding assistant
@@ -169,7 +174,7 @@
 				}
 			}
 
-			const siblingInfo = getMessageSiblings(allConversationMessages, msg.id);
+			const siblingInfo = getMessageSiblings(allConversationMessages, msg.id, nodeMap);
 
 			result.push({
 				message: msg,
