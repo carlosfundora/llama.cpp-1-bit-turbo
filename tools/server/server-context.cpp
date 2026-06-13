@@ -3044,14 +3044,18 @@ private:
 
                         slot.audio_pos = slot.prompt.tokens.pos_next() + slot.audio_pos_offset;
 
-                        int n_samples = mtmd_get_n_audio_samples(slot.mctx);
-                        if (n_samples > 0) {
-                            completion_token_output result;
-                            result.tok = 0;
-                            result.text_to_send = "";
-                            result.prob = 1.0f;
-                            result.audio_samples.resize(n_samples);
-                            mtmd_get_audio_samples(slot.mctx, result.audio_samples.data());
+                        completion_token_output result;
+                        result.tok = 0;
+                        result.text_to_send = "";
+                        result.prob = 1.0f;
+                        // Drain all available audio (fixed-size frames) into this step's result.
+                        int n_samples;
+                        while ((n_samples = mtmd_get_n_audio_samples(slot.mctx)) > 0) {
+                            const size_t off = result.audio_samples.size();
+                            result.audio_samples.resize(off + n_samples);
+                            mtmd_get_audio_samples(slot.mctx, result.audio_samples.data() + off);
+                        }
+                        if (!result.audio_samples.empty()) {
                             result.audio_sample_rate = mtmd_audio_output_get_sample_rate(slot.mctx);
                             send_partial_response(slot, result, false);
 
@@ -3188,14 +3192,18 @@ private:
                         continue;
                     }
 
-                    const int n_samples = mtmd_get_n_audio_samples(slot.mctx);
-                    if (n_samples > 0) {
-                        completion_token_output result;
-                        result.tok = 0;
-                        result.text_to_send = "";
-                        result.prob = 1.0f;
-                        result.audio_samples.resize(n_samples);
-                        mtmd_get_audio_samples(slot.mctx, result.audio_samples.data());
+                    completion_token_output result;
+                    result.tok = 0;
+                    result.text_to_send = "";
+                    result.prob = 1.0f;
+                    // Drain all available audio (fixed-size frames) into this step's result.
+                    int n_samples;
+                    while ((n_samples = mtmd_get_n_audio_samples(slot.mctx)) > 0) {
+                        const size_t off = result.audio_samples.size();
+                        result.audio_samples.resize(off + n_samples);
+                        mtmd_get_audio_samples(slot.mctx, result.audio_samples.data() + off);
+                    }
+                    if (!result.audio_samples.empty()) {
                         result.audio_sample_rate = mtmd_audio_output_get_sample_rate(slot.mctx);
                         send_partial_response(slot, result, false);
 
