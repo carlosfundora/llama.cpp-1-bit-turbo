@@ -3030,7 +3030,12 @@ llama_context * llama_init_from_model(
         params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED;
     }
 
-    if (params.flash_attn_type == LLAMA_FLASH_ATTN_TYPE_AUTO && ggml_is_quantized(params.type_v)) {
+    // Validate that the V cache quant block size divides the V head dim whenever flash
+    // attention may be used (AUTO *or* explicitly ON). This previously only ran for AUTO,
+    // so `-fa on` with e.g. a RotorQuant V cache (iso3/planar3, block size 128) on a model
+    // with n_embd_head_v=64 bypassed the check and produced garbage (GPU) or a segfault
+    // (CPU). Erroring here gives a clear message instead of silently corrupting attention.
+    if (params.flash_attn_type != LLAMA_FLASH_ATTN_TYPE_DISABLED && ggml_is_quantized(params.type_v)) {
         const uint32_t blck_size = ggml_blck_size(params.type_v);
         for (uint32_t il = 0; il < model->hparams.n_layer; ++il) {
             if (model->hparams.n_embd_head_v(il) % blck_size != 0) {

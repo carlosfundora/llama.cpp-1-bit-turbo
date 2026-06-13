@@ -346,6 +346,19 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
     const ggml_tensor * V     = dst->src[2];
     const ggml_tensor * mask  = dst->src[3];
 
+    // RotorQuant V-cache (PLANAR/ISO) quantizes the V head dim into fixed 128-element
+    // blocks. If the V head dim is not a multiple of 128 the quant blocks straddle head
+    // boundaries, producing garbage output (and the CPU path overruns/segfaults). Reject
+    // so FLASH_ATTN_EXT reports unsupported and the runtime falls back gracefully instead
+    // of silently corrupting attention. (head_dim 128 models e.g. Bonsai work correctly.)
+    {
+        const bool rotorquant_v = (V->type == GGML_TYPE_PLANAR3_0 || V->type == GGML_TYPE_PLANAR4_0 ||
+                                   V->type == GGML_TYPE_ISO3_0    || V->type == GGML_TYPE_ISO4_0);
+        if (rotorquant_v && (V->ne[0] % 128 != 0)) {
+            return BEST_FATTN_KERNEL_NONE;
+        }
+    }
+
     const int gqa_ratio = Q->ne[2] / K->ne[2];
     GGML_ASSERT(Q->ne[2] % K->ne[2] == 0);
 
