@@ -413,7 +413,7 @@ struct server_slot {
 
         SLT_INF(*this,
                 "   graphs reused = %10d\n",
-                llama_perf_context(ctx_tgt).n_reused);
+                llama_perf_context(ctx).n_reused);
 
         if (n_draft_total > 0) {
             const float draft_ratio = (float) n_draft_accepted / n_draft_total;
@@ -615,8 +615,6 @@ private:
     bool sleeping = false;
 
     void destroy() {
-        spec.reset();
-        ctx_dft.reset();
         model_dft.reset();
 
         llama_init.reset();
