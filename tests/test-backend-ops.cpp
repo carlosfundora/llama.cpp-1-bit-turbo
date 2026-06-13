@@ -7394,6 +7394,9 @@ static const ggml_type all_types[] = {
     GGML_TYPE_IQ2_XXS, GGML_TYPE_IQ2_XS, GGML_TYPE_IQ2_S,
     GGML_TYPE_IQ3_XXS, GGML_TYPE_IQ1_S, GGML_TYPE_IQ1_M,
     GGML_TYPE_IQ4_NL, GGML_TYPE_IQ3_S, GGML_TYPE_IQ4_XS,
+    // 1-bit-turbo custom quants (PrismML Bonsai 1-bit) — verified on CPU + ROCm
+    GGML_TYPE_Q1_0, GGML_TYPE_Q1_0_g128,
+    // GGML_TYPE_TQ3_0, // TODO: weight MUL_MAT not dispatched on ROCm + CPU ref path needs repair
 };
 
 static const ggml_type base_types[] = {

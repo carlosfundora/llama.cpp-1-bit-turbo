@@ -193,8 +193,6 @@ void ggml_vec_dot_q1_0_g128_q8_0_generic(int n, float * GGML_RESTRICT s, size_t 
     for (int i = 0; i < nb; i++) {
         const float d0 = GGML_FP16_TO_FP32(x[i].d);
 
-        int sumi = 0;
-
         // Process 4 Q8_0 blocks (4 * 32 = 128 elements)
         for (int k = 0; k < 4; k++) {
             const float d1 = GGML_FP16_TO_FP32(y[i*4 + k].d);
@@ -213,10 +211,11 @@ void ggml_vec_dot_q1_0_g128_q8_0_generic(int n, float * GGML_RESTRICT s, size_t 
                 sumi_block += xi * yi;
             }
 
-            sumi += d1 * sumi_block;
+            // accumulate in float: each Q8_0 sub-block has its own scale d1, so the
+            // scaled per-block sum must NOT be truncated to int (the old `int sumi +=
+            // d1 * sumi_block` discarded the fractional part -> ~4-9% error).
+            sumf += d0 * d1 * sumi_block;
         }
-
-        sumf += d0 * sumi;
     }
 
     *s = sumf;
