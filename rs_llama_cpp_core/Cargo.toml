@@ -1,0 +1,6 @@
+[package]
+name = "rs_llama_cpp_core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]

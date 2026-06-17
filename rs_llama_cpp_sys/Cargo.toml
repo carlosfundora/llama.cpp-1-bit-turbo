@@ -1,0 +1,17 @@
+[package]
+name = "rs_llama_cpp_sys"
+version = "0.1.0"
+# Raw bindgen output uses edition-2021-style `extern "C"` blocks (no `unsafe extern`),
+# so this -sys crate stays on 2021 while the rest of the workspace is 2024.
+edition = "2021"
+description = "Raw FFI bindings to the in-tree llama.cpp 1-bit-turbo HIP fork; links the prebuilt build-hip artifacts (the tree is already built — no submodule/cmake build)."
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["rocm"]
+# `rocm` gates the gfx1030 HIP linkage. The build-hip artifacts ARE the HIP build,
+# so this is on by default; a future `cpu`-only build would link a CPU-only tree.
+rocm = []
+
+[build-dependencies]
+bindgen = "0.70"
