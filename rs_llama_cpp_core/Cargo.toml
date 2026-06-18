@@ -1,6 +1,14 @@
 [package]
 name = "rs_llama_cpp_core"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+description = "Safe RAII wrappers over rs_llama_cpp_sys (LlamaBackend / LlamaModel / LlamaContext) for the ATOM-RS Lane-A engine: model load, embeddings (pooled sequence embedding) on the gfx1030 HIP base."
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["rocm"]
+rocm = ["rs_llama_cpp_sys/rocm"]
 
 [dependencies]
+rs_llama_cpp_sys = { path = "../rs_llama_cpp_sys" }
+thiserror = "2"
