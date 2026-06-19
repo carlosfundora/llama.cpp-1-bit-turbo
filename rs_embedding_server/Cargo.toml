@@ -1,0 +1,23 @@
+[package]
+name = "rs_embedding_server"
+version = "0.1.0"
+edition = "2021"
+description = "Pure-Rust OpenAI-compatible embedding server on the llama.cpp-HIP base (rs_llama_cpp_core). Lane-A replacement for the Python embed-pool workers: /v1/embeddings with Matryoshka dims + last-token pooling on gfx1030."
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "rs-embedding-server"
+path = "src/main.rs"
+
+[dependencies]
+rs_llama_cpp_core = { path = "../rs_llama_cpp_core" }
+axum = "0.8"
+tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[features]
+default = ["rocm"]
+rocm = ["rs_llama_cpp_core/rocm"]

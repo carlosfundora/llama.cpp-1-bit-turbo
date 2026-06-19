@@ -1,7 +1,9 @@
 [workspace]
+resolver = "2"
 members = [
     "rs_llama_cpp_sys",
     "rs_llama_cpp_core",
     "rs_llama_samplers",
     "rs_llama_mtmd",
+    "rs_embedding_server",
 ]
