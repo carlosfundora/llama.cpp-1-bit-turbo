@@ -192,7 +192,7 @@ static constexpr __device__ int get_mmq_y_device() {
 static constexpr __host__ __device__ tile_x_sizes mmq_get_dp4a_tile_x_sizes(ggml_type type, int mmq_y) {
     switch (type) {
         case GGML_TYPE_Q1_0:    return MMQ_DP4A_TXS_Q1_0;
-        case GGML_TYPE_Q1_0_g128: return MMQ_DP4A_TXS_Q1_0_g128;
+        case GGML_TYPE_Q1_0_g128: return MMQ_DP4A_TXS_Q8_0;
         case GGML_TYPE_Q4_0:    return MMQ_DP4A_TXS_Q4_0;
         case GGML_TYPE_Q4_1:    return MMQ_DP4A_TXS_Q4_1;
         case GGML_TYPE_Q5_0:    return MMQ_DP4A_TXS_Q8_0;
@@ -240,7 +240,7 @@ static_assert(MMQ_MMA_TILE_X_K_NVFP4 % 8 == 4, "Wrong padding.");
 static constexpr __host__ __device__ int mmq_get_mma_tile_x_k(ggml_type type) {
     switch (type) {
         case GGML_TYPE_Q1_0:    return MMQ_MMA_TILE_X_K_Q8_0;
-        case GGML_TYPE_Q1_0_g128: return MMQ_MMA_TILE_X_K_Q8_0_g128;
+        case GGML_TYPE_Q1_0_g128: return MMQ_MMA_TILE_X_K_Q8_0;
         case GGML_TYPE_Q4_0:    return MMQ_MMA_TILE_X_K_Q8_0;
         case GGML_TYPE_Q4_1:    return MMQ_MMA_TILE_X_K_Q8_1;
         case GGML_TYPE_Q5_0:    return MMQ_MMA_TILE_X_K_Q8_0;
@@ -3255,6 +3255,77 @@ template <int mmq_y, bool need_check> static __device__ __forceinline__ void loa
     }
 }
 
+// Q1_0_g128: each bit becomes an int8 of +1 or -1 in the Q8_0 tile layout, so
+// the Q8_0 dot products apply. One tile row holds MMQ_ITER_K/QK1_0_g128 = 2 blocks.
+template <int mmq_y, bool need_check> static __device__ __forceinline__ void load_tiles_q1_0_g128(
+    const char * __restrict__ x, int * __restrict__ x_tile, const int kbx0, const int i_max, const int stride) {
+    constexpr int nwarps = mmq_get_nwarps_device();
+    constexpr int warp_size = ggml_cuda_get_physical_warp_size();
+
+#if defined(AMD_MFMA_AVAILABLE) || defined(TURING_MMA_AVAILABLE) || defined(AMD_WMMA_AVAILABLE)
+    int   * x_qs = (int   *)  x_tile;
+    float * x_df = (float *) (x_qs + MMQ_TILE_NE_K*2);
+#else
+    constexpr tile_x_sizes txs = mmq_get_dp4a_tile_x_sizes(GGML_TYPE_Q1_0_g128, mmq_y);
+    int   * x_qs = (int   *)  x_tile;
+    float * x_df = (float *) (x_qs + txs.qs);
+#endif // defined(AMD_MFMA_AVAILABLE) || defined(TURING_MMA_AVAILABLE) || defined(AMD_WMMA_AVAILABLE)
+
+    constexpr int bytes_per_block = QK1_0_g128 / 8;
+    constexpr int threads_per_row = MMQ_ITER_K / 8; // one byte (8 values) per thread
+    constexpr int nrows = warp_size / threads_per_row;
+    const int txi  = threadIdx.x % threads_per_row;
+    const int kbx  = txi / bytes_per_block;
+    const int kqsx = txi % bytes_per_block;
+
+#pragma unroll
+    for (int i0 = 0; i0 < mmq_y; i0 += nrows*nwarps) {
+        int i = i0 + (nrows == 1 ? threadIdx.y : threadIdx.y*nrows + threadIdx.x/threads_per_row);
+
+        if (need_check) {
+            i = min(i, i_max);
+        }
+
+        const block_q1_0_g128 * bxi = (const block_q1_0_g128 *) x + kbx0 + i*stride + kbx;
+        const uint32_t bits = bxi->qs[kqsx];
+
+        // Byte j of t is bit j of the nibble. Then 1 -> 0x01 (+1) and 0 -> 0xFF (-1).
+        const uint32_t t0 = ((bits & 0x0F) * 0x00204081u) & 0x01010101u;
+        const uint32_t t1 = ((bits >>   4) * 0x00204081u) & 0x01010101u;
+        const int v0 = (int) (~(t0 * 0xFFu) | t0);
+        const int v1 = (int) (~(t1 * 0xFFu) | t1);
+        const int k0 = 2*txi;
+
+#if defined(AMD_MFMA_AVAILABLE) || defined(TURING_MMA_AVAILABLE) || defined(AMD_WMMA_AVAILABLE)
+        x_qs[i*MMQ_MMA_TILE_X_K_Q8_0 + k0 + 0] = v0;
+        x_qs[i*MMQ_MMA_TILE_X_K_Q8_0 + k0 + 1] = v1;
+#else
+        x_qs[i*(2*MMQ_TILE_NE_K + 1) + k0 + 0] = v0;
+        x_qs[i*(2*MMQ_TILE_NE_K + 1) + k0 + 1] = v1;
+#endif // defined(AMD_MFMA_AVAILABLE) || defined(TURING_MMA_AVAILABLE) || defined(AMD_WMMA_AVAILABLE)
+    }
+
+    // 8 scales per row, one per 32 values: each block's scale fills 4 of them.
+    constexpr int rows_per_warp = warp_size / 8;
+#pragma unroll
+    for (int i0 = 0; i0 < mmq_y; i0 += nwarps * rows_per_warp) {
+        int i = i0 + threadIdx.y * rows_per_warp + threadIdx.x / 8;
+
+        if (need_check) {
+            i = min(i, i_max);
+        }
+
+        const int s = threadIdx.x % 8;
+        const block_q1_0_g128 * bxi = (const block_q1_0_g128 *) x + kbx0 + i*stride + s/4;
+
+#if defined(AMD_MFMA_AVAILABLE) || defined(TURING_MMA_AVAILABLE) || defined(AMD_WMMA_AVAILABLE)
+        x_df[i*MMQ_MMA_TILE_X_K_Q8_0   + s] = __half2float(bxi->d);
+#else
+        x_df[i*(MMQ_TILE_NE_K/4) + i/4 + s] = __half2float(bxi->d);
+#endif // defined(AMD_MFMA_AVAILABLE) || defined(TURING_MMA_AVAILABLE) || defined(AMD_WMMA_AVAILABLE)
+    }
+}
+
 template <int mmq_y, bool need_check> static __device__ __forceinline__ void load_tiles_iq4_xs(
     const char * __restrict__ x, int * __restrict__ x_tile, const int kbx0, const int i_max, const int stride) {
     constexpr int nwarps = mmq_get_nwarps_device();
@@ -3440,6 +3511,14 @@ struct mmq_type_traits<mmq_x, mmq_y, need_check, GGML_TYPE_Q5_1> {
     static constexpr load_tiles_mmq_t load_tiles   = load_tiles_q5_1<mmq_y, need_check>;
     static constexpr vec_dot_mmq_t    vec_dot_mma  = vec_dot_q8_1_q8_1_mma<mmq_x, mmq_y>;
     static constexpr vec_dot_mmq_t    vec_dot_dp4a = vec_dot_q8_1_q8_1_dp4a<mmq_x, mmq_y>;
+};
+
+template <int mmq_x, int mmq_y, bool need_check>
+struct mmq_type_traits<mmq_x, mmq_y, need_check, GGML_TYPE_Q1_0_g128> {
+    static constexpr int              vdr          = VDR_Q8_0_Q8_1_MMQ;
+    static constexpr load_tiles_mmq_t load_tiles   = load_tiles_q1_0_g128<mmq_y, need_check>;
+    static constexpr vec_dot_mmq_t    vec_dot_mma  = vec_dot_q8_0_q8_1_mma<mmq_x, mmq_y, MMQ_Q8_1_DS_LAYOUT_D4>;
+    static constexpr vec_dot_mmq_t    vec_dot_dp4a = vec_dot_q8_0_q8_1_dp4a<mmq_x, mmq_y>;
 };
 
 template <int mmq_x, int mmq_y, bool need_check>
@@ -4274,7 +4353,7 @@ void mul_mat_q_case(ggml_backend_cuda_context & ctx, const mmq_args & args, cuda
     template void mul_mat_q_case<type>(ggml_backend_cuda_context & ctx, const mmq_args & args, cudaStream_t stream) \
 
 // extern DECL_MMQ_CASE(GGML_TYPE_Q1_0);  // disabled, cuBLAS fallback used
-// extern DECL_MMQ_CASE(GGML_TYPE_Q1_0_g128);  // disabled, cuBLAS fallback used
+extern DECL_MMQ_CASE(GGML_TYPE_Q1_0_g128);
 extern DECL_MMQ_CASE(GGML_TYPE_Q4_0);
 extern DECL_MMQ_CASE(GGML_TYPE_Q4_1);
 extern DECL_MMQ_CASE(GGML_TYPE_Q5_0);
